@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { FloatingHeader } from "@/components/ui/floating-header";
+import { useRequireAuth } from "@/lib/auth";
 import {
   Card,
   CardContent,
@@ -384,6 +386,7 @@ function buildTradeInput(overrides: Partial<TradeInput> = {}): TradeInput {
 }
 
 export default function DashboardPage() {
+  const { user, loading } = useRequireAuth();
   const [trades, setTrades] = useState<Trade[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const [intervalId, setIntervalId] = useState<NodeJS.Timeout | null>(null);
@@ -858,6 +861,23 @@ export default function DashboardPage() {
     }
   }, [allChartPoints, chartWidth, chartHeight]);
 
+  // Show loading state while checking auth (after all hooks)
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin h-8 w-8 border-4 border-slate-300 border-t-slate-900 rounded-full mx-auto mb-4"></div>
+          <p className="text-slate-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // If not authenticated, useRequireAuth will redirect to login
+  if (!user) {
+    return null;
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50 relative overflow-hidden">
       {/* Vibrant pastel gradient glows */}
@@ -868,26 +888,9 @@ export default function DashboardPage() {
         <div className="absolute top-1/3 left-1/2 -translate-x-1/2 h-[400px] w-[700px] rounded-full bg-gradient-to-r from-emerald-200/40 via-teal-100/30 to-cyan-200/40 blur-3xl" />
       </div>
 
-      <header className="relative z-10 border-b border-white/20 bg-white/40 backdrop-blur-2xl">
-        <div className="max-w-6xl mx-auto flex items-center justify-between px-6 py-4">
-          <Link href="/" className="text-lg font-black tracking-tight text-slate-900 hover:text-violet-600 transition-colors">
-            spectra
-          </Link>
-          <div className="flex items-center gap-4">
-            {lastTriggerResult && (
-              <span className="text-xs font-medium text-slate-400">
-                {lastTriggerResult}
-              </span>
-            )}
-            <Link
-              href="/"
-              className="text-xs font-bold text-slate-400 hover:text-slate-900 transition-colors uppercase tracking-wide"
-            >
-              Sign out
-            </Link>
-          </div>
-        </div>
-      </header>
+      <div className="relative w-full px-4 pt-4">
+        <FloatingHeader />
+      </div>
 
       <main className="relative z-10 max-w-5xl mx-auto px-6 py-6 space-y-5">
         {/* Top bar with stats and controls */}

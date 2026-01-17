@@ -1,7 +1,6 @@
 """Spectra TUI - Terminal Dashboard for AI Trading Agents."""
 
 import json
-import math
 from datetime import datetime
 from typing import Any
 
@@ -25,165 +24,18 @@ from textual.widgets import (
 from .config import config
 
 
-# 3D Voxel Text Renderer - actual 3D model with depth
-class Text3D:
-    """True 3D voxel-based text with rotation and shading."""
-
-    # 5x7 font for cleaner letters (taller = better proportions)
-    FONT = {
-        'S': [
-            "█████",
-            "█    ",
-            "█    ",
-            "█████",
-            "    █",
-            "    █",
-            "█████",
-        ],
-        'P': [
-            "█████",
-            "█   █",
-            "█   █",
-            "█████",
-            "█    ",
-            "█    ",
-            "█    ",
-        ],
-        'E': [
-            "█████",
-            "█    ",
-            "█    ",
-            "████ ",
-            "█    ",
-            "█    ",
-            "█████",
-        ],
-        'C': [
-            "█████",
-            "█    ",
-            "█    ",
-            "█    ",
-            "█    ",
-            "█    ",
-            "█████",
-        ],
-        'T': [
-            "█████",
-            "  █  ",
-            "  █  ",
-            "  █  ",
-            "  █  ",
-            "  █  ",
-            "  █  ",
-        ],
-        'R': [
-            "█████",
-            "█   █",
-            "█   █",
-            "█████",
-            "█ █  ",
-            "█  █ ",
-            "█   █",
-        ],
-        'A': [
-            " ███ ",
-            "█   █",
-            "█   █",
-            "█████",
-            "█   █",
-            "█   █",
-            "█   █",
-        ],
-    }
-
-    def __init__(self, text: str = "SPECTRA", depth: int = 3):
-        self.text = text
-        self.depth = depth
-        self.voxels: list[tuple[float, float, float]] = []
-        self._build_voxels()
-
-    def _build_voxels(self) -> None:
-        """Build 3D voxel model from text."""
-        self.voxels = []
-        x_offset = 0
-
-        for char in self.text:
-            if char not in self.FONT:
-                x_offset += 6
-                continue
-
-            letter = self.FONT[char]
-            for y, row in enumerate(letter):
-                for x, ch in enumerate(row):
-                    if ch == '█':
-                        # Create voxel with full depth (solid 3D block)
-                        for z in range(self.depth):
-                            self.voxels.append((x_offset + x, y, z))
-            x_offset += 6  # Letter width + gap
-
-        # Center the model at origin
-        if self.voxels:
-            cx = sum(v[0] for v in self.voxels) / len(self.voxels)
-            cy = sum(v[1] for v in self.voxels) / len(self.voxels)
-            cz = sum(v[2] for v in self.voxels) / len(self.voxels)
-            self.voxels = [(x - cx, y - cy, z - cz) for x, y, z in self.voxels]
-
-    def render(self, angle: float, screen_width: int = 80, screen_height: int = 15) -> str:
-        """Render 3D model with Y-axis rotation."""
-        cos_a = math.cos(angle)
-        sin_a = math.sin(angle)
-
-        # Rotate and project all voxels
-        projected: list[tuple[int, int, float]] = []
-
-        for x, y, z in self.voxels:
-            # Rotate around Y axis
-            rx = x * cos_a - z * sin_a
-            rz = x * sin_a + z * cos_a
-            ry = y
-
-            # Perspective projection
-            distance = 30.0
-            fov = 50.0
-            scale = fov / (distance + rz)
-
-            # Project to screen (2x for aspect ratio)
-            sx = int(rx * scale * 2.0) + screen_width // 2
-            sy = int(ry * scale) + screen_height // 2
-
-            if 0 <= sx < screen_width and 0 <= sy < screen_height:
-                projected.append((sx, sy, rz))
-
-        # Create screen with z-buffer
-        screen = [[' ' for _ in range(screen_width)] for _ in range(screen_height)]
-        zbuf = [[float('-inf') for _ in range(screen_width)] for _ in range(screen_height)]
-
-        # Sort back-to-front and render
-        projected.sort(key=lambda p: p[2])
-
-        for sx, sy, rz in projected:
-            if rz > zbuf[sy][sx]:
-                zbuf[sy][sx] = rz
-                # Shade based on depth (front = bright, back = dark)
-                norm_z = (rz + self.depth) / (self.depth * 2)
-                if norm_z > 0.65:
-                    screen[sy][sx] = '█'
-                elif norm_z > 0.45:
-                    screen[sy][sx] = '▓'
-                elif norm_z > 0.25:
-                    screen[sy][sx] = '▒'
-                else:
-                    screen[sy][sx] = '░'
-
-        return '\n'.join(''.join(row) for row in screen)
-
-
-# Loading bar settings
-LOAD_TOTAL_FRAMES = 50  # 5 seconds at 0.1s interval
+# Static logo
+LOGO = """
+ ███████ ██████  ███████  ██████ ████████ ██████   █████
+ ██      ██   ██ ██      ██         ██    ██   ██ ██   ██
+ ███████ ██████  █████   ██         ██    ██████  ███████
+      ██ ██      ██      ██         ██    ██   ██ ██   ██
+ ███████ ██      ███████  ██████    ██    ██   ██ ██   ██
+"""
 
 
 class LogoWidget(Static):
-    """Animated 3D logo widget with real rotation."""
+    """Logo widget with animated loading bar."""
 
     DEFAULT_CSS = """
     LogoWidget {
@@ -196,55 +48,31 @@ class LogoWidget(Static):
 
     def __init__(self) -> None:
         super().__init__()
-        self._angle = 0.0
         self._frame = 0
-        self._text3d = Text3D("SPECTRA", depth=4)
 
     def on_mount(self) -> None:
-        self._update_display()  # Show initial frame immediately
-        self.set_interval(0.08, self._animate)  # ~12 FPS for smooth rotation
+        self._update_display()
+        self.set_interval(0.1, self._animate)
 
     def _animate(self) -> None:
-        self._angle += 0.12  # Rotation speed
         self._frame += 1
         self._update_display()
-
-    def _render_loading_bar(self, progress: float) -> str:
-        """Render a smooth gradient loading bar."""
-        bar_width = 32
-        filled = int(progress * bar_width)
-
-        # Gradient characters for smooth fill
-        chars = " ░▒▓█"
-
-        bar = ""
-        for i in range(bar_width):
-            if i < filled:
-                bar += "█"
-            elif i == filled:
-                # Partial fill with gradient
-                partial = (progress * bar_width) - filled
-                char_idx = int(partial * (len(chars) - 1))
-                bar += chars[char_idx]
-            else:
-                bar += "░"
-
-        percent = int(progress * 100)
-        return f"[{bar}] {percent}%"
 
     def _update_display(self) -> None:
         output = Text()
 
-        # Render 3D rotating text
-        rendered_3d = self._text3d.render(self._angle, screen_width=80, screen_height=12)
-        output.append(rendered_3d, style=Style(color="white", bold=True))
+        # Static logo
+        output.append(LOGO, style=Style(color="white", bold=True))
 
-        # Loading bar progress (5 seconds = 50 frames at 0.1s, but we're at 0.08s so ~62 frames)
-        progress = min(self._frame / 62, 1.0)
-        loading_bar = self._render_loading_bar(progress)
+        # Animated loading bar (5 seconds = 50 frames)
+        progress = min(self._frame / 50, 1.0)
+        bar_width = 30
+        filled = int(progress * bar_width)
+        bar = "█" * filled + "░" * (bar_width - filled)
+        percent = int(progress * 100)
 
-        output.append(f"\n\n{loading_bar}\n", style=Style(color="#00aaff"))
-        output.append("\n         INITIALIZING AGENTS...\n", style=Style(color="#444444"))
+        output.append(f"\n[{bar}] {percent}%\n", style=Style(color="#00aaff"))
+        output.append("\nINITIALIZING AGENTS...\n", style=Style(color="#444444"))
 
         self.update(Align.center(output))
 
@@ -259,7 +87,7 @@ class LoadingScreen(Screen):
     }
 
     #logo-container {
-        width: 90;
+        width: 70;
         height: auto;
         align: center middle;
     }

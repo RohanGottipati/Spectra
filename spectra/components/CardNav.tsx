@@ -1,9 +1,13 @@
+'use client';
+
 import React, { useLayoutEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { gsap } from 'gsap';
 // use your own icon import if react-icons is not available
 import { GoArrowUpRight } from 'react-icons/go';
 import './CardNav.css';
+import { useAuth } from '@/lib/auth';
 
 type CardNavLink = {
   label: string;
@@ -53,6 +57,8 @@ const CardNav: React.FC<CardNavProps> = ({
   hideOnScroll = false,
   actions
 }) => {
+  const { user, signOut } = useAuth();
+  const router = useRouter();
   const [isHamburgerOpen, setIsHamburgerOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
@@ -62,6 +68,19 @@ const CardNav: React.FC<CardNavProps> = ({
   const cardsRef = useRef<HTMLDivElement[]>([]);
   const tlRef = useRef<gsap.core.Timeline | null>(null);
   const lastScrollY = useRef(0);
+
+  const handleLogout = async () => {
+    await signOut();
+    router.push('/');
+    router.refresh();
+  };
+
+  const handleDashboardClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    if (!user) {
+      e.preventDefault();
+      router.push('/login');
+    }
+  };
 
   // Track scroll position to change navbar style and hide on scroll
   useLayoutEffect(() => {
@@ -272,7 +291,13 @@ const CardNav: React.FC<CardNavProps> = ({
               <div className="nav-card-label">{item.label}</div>
               <div className="nav-card-links">
                 {item.links?.map((lnk, i) => (
-                  <a key={`${lnk.label}-${i}`} className="nav-card-link" href={lnk.href} aria-label={lnk.ariaLabel}>
+                  <a 
+                    key={`${lnk.label}-${i}`} 
+                    className="nav-card-link" 
+                    href={lnk.href} 
+                    aria-label={lnk.ariaLabel}
+                    onClick={lnk.href === '/dashboard' ? handleDashboardClick : undefined}
+                  >
                     <GoArrowUpRight className="nav-card-link-icon" aria-hidden="true" />
                     {lnk.label}
                   </a>
