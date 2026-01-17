@@ -32,6 +32,7 @@ export interface CardNavProps {
   buttonTextColor?: string;
   buttonText?: string;
   buttonHref?: string;
+  hideOnScroll?: boolean;
 }
 
 const CardNav: React.FC<CardNavProps> = ({
@@ -47,23 +48,37 @@ const CardNav: React.FC<CardNavProps> = ({
   buttonBgColor,
   buttonTextColor,
   buttonText = 'Get Started',
-  buttonHref
+  buttonHref,
+  hideOnScroll = false
 }) => {
   const [isHamburgerOpen, setIsHamburgerOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
+  const [isHidden, setIsHidden] = useState(false);
   const navRef = useRef<HTMLDivElement | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const cardsRef = useRef<HTMLDivElement[]>([]);
   const tlRef = useRef<gsap.core.Timeline | null>(null);
+  const lastScrollY = useRef(0);
 
-  // Track scroll position to change navbar style
+  // Track scroll position to change navbar style and hide on scroll
   useLayoutEffect(() => {
     const handleScroll = () => {
-      setIsScrolled(window.scrollY > 100);
+      const currentScrollY = window.scrollY;
+      setIsScrolled(currentScrollY > 100);
+      
+      if (hideOnScroll) {
+        // Only show navbar when at the very top (within ~50px)
+        setIsHidden(currentScrollY > 50);
+      }
+      
+      lastScrollY.current = currentScrollY;
     };
     window.addEventListener('scroll', handleScroll);
+    // Check initial scroll position
+    handleScroll();
     return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
+  }, [hideOnScroll]);
 
   const calculateHeight = () => {
     const navEl = navRef.current;
@@ -176,7 +191,19 @@ const CardNav: React.FC<CardNavProps> = ({
   };
 
   return (
-    <div className={`card-nav-container ${className}`}>
+    <div 
+      ref={containerRef}
+      className={`card-nav-container ${className}`}
+      style={{
+        transform: hideOnScroll && isHidden 
+          ? 'translateX(-50%) translateY(-100%)' 
+          : 'translateX(-50%) translateY(0)',
+        opacity: hideOnScroll && isHidden ? 0 : 1,
+        visibility: hideOnScroll && isHidden ? 'hidden' : 'visible',
+        pointerEvents: hideOnScroll && isHidden ? 'none' : 'auto',
+        transition: 'transform 0.3s ease-in-out, opacity 0.3s ease-in-out',
+      }}
+    >
       <nav ref={navRef} className={`card-nav ${isExpanded ? 'open' : ''} ${isScrolled ? 'scrolled' : ''}`} style={{ backgroundColor: isScrolled ? 'rgba(15, 23, 42, 0.95)' : baseColor, backdropFilter: isScrolled ? 'blur(12px)' : undefined, transition: 'background-color 0.3s ease, backdrop-filter 0.3s ease' }}>
         <div className="card-nav-top">
           <div
