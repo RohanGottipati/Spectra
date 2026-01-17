@@ -107,6 +107,13 @@
   background-color: #333;
 }
 
+.card-nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  height: 100%;
+}
+
 .card-nav-content {
   position: absolute;
   left: 0;
@@ -188,7 +195,8 @@
     order: 1;
   }
 
-  .card-nav-cta-button {
+  .card-nav-cta-button,
+  .card-nav-actions {
     display: none;
   }
 

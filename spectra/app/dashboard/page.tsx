@@ -6,9 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
-  CardAction,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -22,6 +20,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { ShimmerButton } from "@/components/ui/shimmer-button";
+import { NumberTicker } from "@/components/ui/number-ticker";
+import { ShineBorder } from "@/components/ui/shine-border";
 import { createClient } from "@/lib/supabase/client";
 
 type AgentId = "alpha" | "beta" | "gamma";
@@ -378,7 +387,8 @@ export default function DashboardPage() {
   const [trades, setTrades] = useState<Trade[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const [intervalId, setIntervalId] = useState<NodeJS.Timeout | null>(null);
-  const [selectedTradeId, setSelectedTradeId] = useState<string | null>(null);
+  const [hoveredTradeId, setHoveredTradeId] = useState<string | null>(null);
+  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
   const [tradesPerAgent, setTradesPerAgent] = useState(1);
   const tradesPerAgentRef = useRef(tradesPerAgent);
   const chartWrapRef = useRef<HTMLDivElement | null>(null);
@@ -390,10 +400,7 @@ export default function DashboardPage() {
   const [lastTriggerResult, setLastTriggerResult] = useState<string | null>(null);
   const supabaseRef = useRef(createClient());
 
-  const [agent, setAgent] = useState<AgentId>("alpha");
-  const [action, setAction] = useState<TradeAction>("buy");
-  const [token, setToken] = useState("SOL");
-  const [amount, setAmount] = useState("");
+  const [isConfigOpen, setIsConfigOpen] = useState(false);
   const [agentConfigs, setAgentConfigs] = useState<
     Record<AgentId, AgentConfig>
   >({
@@ -466,21 +473,6 @@ export default function DashboardPage() {
         confidence: Number((0.45 + Math.random() * 0.08).toFixed(2)),
       }),
     );
-  };
-
-  const submitTrade = (event: React.FormEvent) => {
-    event.preventDefault();
-    const numericAmount = parseFloat(amount);
-    if (!numericAmount || Number.isNaN(numericAmount)) return;
-    addTrade(
-      buildTradeInput({
-        agent,
-        action,
-        token,
-        amount: numericAmount,
-      }),
-    );
-    setAmount("");
   };
 
   const handleConfigUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -558,18 +550,12 @@ export default function DashboardPage() {
     return () => clearInterval(intervalId);
   }, [intervalId]);
 
+  // Clear hover if hovered trade is no longer in the list
   useEffect(() => {
-    if (!trades.length) {
-      setSelectedTradeId(null);
-      return;
+    if (hoveredTradeId && !trades.some((trade) => trade.id === hoveredTradeId)) {
+      setHoveredTradeId(null);
     }
-    if (
-      !selectedTradeId ||
-      !trades.some((trade) => trade.id === selectedTradeId)
-    ) {
-      setSelectedTradeId(trades[0].id);
-    }
-  }, [trades, selectedTradeId]);
+  }, [trades, hoveredTradeId]);
 
   // Fetch initial trades and subscribe to realtime updates
   useEffect(() => {
@@ -714,9 +700,8 @@ export default function DashboardPage() {
     return grouped;
   }, [trades]);
 
-  const selectedTrade =
-    (selectedTradeId && trades.find((trade) => trade.id === selectedTradeId)) ||
-    trades[0] ||
+  const hoveredTrade =
+    (hoveredTradeId && trades.find((trade) => trade.id === hoveredTradeId)) ||
     null;
 
   const agentStats = useMemo(() => {
@@ -810,8 +795,8 @@ export default function DashboardPage() {
     return grouped;
   }, [visibleTrades]);
 
-  const chartWidth = 1000;
-  const chartHeight = 260;
+  const chartWidth = 900;
+  const chartHeight = 380;
   const tooltipWidth = 240;
   const chartPadding = { top: 20, right: 20, bottom: 28, left: 40 };
   const chartInnerWidth = chartWidth - chartPadding.left - chartPadding.right;
@@ -822,985 +807,687 @@ export default function DashboardPage() {
   const getY = (score: number) =>
     chartPadding.top + (1 - score / 100) * chartInnerHeight;
 
-  const selectedPoint = selectedTrade
+  const hoveredPoint = hoveredTrade
     ? {
-        x: getX(selectedTrade.timestamp.getTime()),
-        y: getY(selectedTrade.riskScore),
+        x: getX(hoveredTrade.timestamp.getTime()),
+        y: getY(hoveredTrade.riskScore),
       }
     : null;
 
-  const tooltipPosition = useMemo(() => {
-    if (!selectedPoint || !chartSize.width || !chartSize.height) return null;
-    const left = (selectedPoint.x / chartWidth) * chartSize.width;
-    const top = (selectedPoint.y / chartHeight) * chartSize.height;
-    return {
-      left: clamp(left, tooltipWidth / 2, chartSize.width - tooltipWidth / 2),
-      top: clamp(top, 40, chartSize.height - 40),
-    };
-  }, [chartHeight, chartSize, chartWidth, selectedPoint, tooltipWidth]);
+  // All chart points with their positions for hover detection
+  const allChartPoints = useMemo(() => {
+    return visibleTrades.map((trade) => ({
+      trade,
+      x: getX(trade.timestamp.getTime()),
+      y: getY(trade.riskScore),
+    }));
+  }, [visibleTrades, getX, getY]);
 
-  useEffect(() => {
-    if (!selectedTrade) return;
-    const time = selectedTrade.timestamp.getTime();
-    if (time < minTime || time > maxTime) {
-      setSelectedTradeId(trades[0]?.id ?? null);
+  // Handle mouse move on chart to find nearest point
+  const handleChartMouseMove = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
+    const svg = e.currentTarget;
+    const rect = svg.getBoundingClientRect();
+    const mouseX = ((e.clientX - rect.left) / rect.width) * chartWidth;
+    const mouseY = ((e.clientY - rect.top) / rect.height) * chartHeight;
+
+    // Find nearest point within threshold
+    const threshold = 25; // pixels in SVG coordinates
+    let nearestPoint: typeof allChartPoints[0] | null = null;
+    let nearestDist = Infinity;
+
+    for (const point of allChartPoints) {
+      const dist = Math.sqrt((point.x - mouseX) ** 2 + (point.y - mouseY) ** 2);
+      if (dist < threshold && dist < nearestDist) {
+        nearestDist = dist;
+        nearestPoint = point;
+      }
     }
-  }, [maxTime, minTime, selectedTrade, trades]);
+
+    if (nearestPoint) {
+      setHoveredTradeId(nearestPoint.trade.id);
+      // Update mouse position for tooltip
+      const wrapperRect = chartWrapRef.current?.getBoundingClientRect();
+      if (wrapperRect) {
+        setMousePosition({
+          x: e.clientX - wrapperRect.left,
+          y: e.clientY - wrapperRect.top,
+        });
+      }
+    } else {
+      setHoveredTradeId(null);
+    }
+  }, [allChartPoints, chartWidth, chartHeight]);
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100">
-      <header className="border-b bg-white/70 backdrop-blur">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50 relative overflow-hidden">
+      {/* Vibrant pastel gradient glows */}
+      <div className="pointer-events-none fixed inset-0 overflow-hidden">
+        <div className="absolute -top-20 -left-20 h-[600px] w-[600px] rounded-full bg-gradient-to-br from-violet-300/70 via-purple-200/50 to-fuchsia-100/30 blur-3xl animate-pulse" style={{ animationDuration: '8s' }} />
+        <div className="absolute top-1/4 -right-10 h-[500px] w-[500px] rounded-full bg-gradient-to-bl from-sky-300/60 via-cyan-200/40 to-blue-100/30 blur-3xl animate-pulse" style={{ animationDuration: '10s', animationDelay: '2s' }} />
+        <div className="absolute -bottom-20 left-1/4 h-[450px] w-[600px] rounded-full bg-gradient-to-t from-rose-300/50 via-pink-200/40 to-orange-100/20 blur-3xl animate-pulse" style={{ animationDuration: '12s', animationDelay: '4s' }} />
+        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 h-[400px] w-[700px] rounded-full bg-gradient-to-r from-emerald-200/40 via-teal-100/30 to-cyan-200/40 blur-3xl" />
+      </div>
+
+      <header className="relative z-10 border-b border-white/20 bg-white/40 backdrop-blur-2xl">
         <div className="max-w-6xl mx-auto flex items-center justify-between px-6 py-4">
-          <Link href="/" className="font-semibold">
+          <Link href="/" className="text-lg font-black tracking-tight text-slate-900 hover:text-violet-600 transition-colors">
             spectra
           </Link>
-          <Link
-            href="/"
-            className="text-sm text-muted-foreground hover:text-foreground"
-          >
-            Sign out
-          </Link>
+          <div className="flex items-center gap-4">
+            {lastTriggerResult && (
+              <span className="text-xs font-medium text-slate-400">
+                {lastTriggerResult}
+              </span>
+            )}
+            <Link
+              href="/"
+              className="text-xs font-bold text-slate-400 hover:text-slate-900 transition-colors uppercase tracking-wide"
+            >
+              Sign out
+            </Link>
+          </div>
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-6 py-8 space-y-6">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h1 className="text-lg font-semibold">
-              Behavior classification cockpit
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              Rolling metrics compare frequency, size, and price impact to each
-              agent baseline.
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Data source toggle */}
-            <div className="flex items-center gap-2 rounded-full border border-white/70 bg-white/70 px-3 py-1 text-xs shadow-sm backdrop-blur">
-              <span className="text-muted-foreground">Data</span>
-              <button
-                onClick={() => setUseRealData(!useRealData)}
-                className={`px-2 py-0.5 rounded text-xs font-medium transition-colors ${
-                  useRealData
-                    ? "bg-emerald-500 text-white"
-                    : "bg-slate-200 text-slate-600"
-                }`}
-              >
-                {useRealData ? "Live" : "Mock"}
-              </button>
-            </div>
-            {!useRealData && (
-              <div className="flex items-center gap-2 rounded-full border border-white/70 bg-white/70 px-3 py-1 text-xs shadow-sm backdrop-blur">
-                <span className="text-muted-foreground">Trades/agent</span>
-                <Input
-                  type="number"
-                  min="1"
-                  max="12"
-                  value={tradesPerAgent}
-                  onChange={(event) => {
-                    const value = Number(event.target.value);
-                    if (Number.isNaN(value)) {
-                      setTradesPerAgent(1);
-                      return;
-                    }
-                    setTradesPerAgent(clamp(Math.floor(value), 1, 12));
-                  }}
-                  className="h-6 w-14 border-white/60 bg-white/80 text-xs"
-                />
+      <main className="relative z-10 max-w-5xl mx-auto px-6 py-6 space-y-5">
+        {/* Top bar with stats and controls */}
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-5">
+            <h1 className="text-xl font-bold tracking-tight text-slate-900">Dashboard</h1>
+            {/* Animated stat badges with glassmorphism */}
+            <div className="hidden md:flex items-center gap-2">
+              <div className="group flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/50 backdrop-blur-xl border border-white/60 shadow-lg shadow-slate-200/50 hover:shadow-xl hover:bg-white/70 transition-all cursor-default">
+                <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse group-hover:scale-125 transition-transform" />
+                <span className="text-xs font-semibold text-slate-600">Active</span>
+                <span className="text-sm font-bold text-slate-900">{activeAgents}/{AGENTS.length}</span>
               </div>
+              <div className={`group flex items-center gap-2 px-3 py-1.5 rounded-full backdrop-blur-xl border shadow-lg transition-all cursor-default ${
+                avgRisk >= 70 ? 'bg-red-100/50 border-red-200/60 hover:bg-red-100/70' :
+                avgRisk >= 45 ? 'bg-amber-100/50 border-amber-200/60 hover:bg-amber-100/70' :
+                'bg-white/50 border-white/60 hover:bg-white/70'
+              } hover:shadow-xl`}>
+                <span className="text-xs font-semibold text-slate-600">Risk</span>
+                <NumberTicker value={avgRisk} decimalPlaces={1} className={`text-sm font-bold ${
+                  avgRisk >= 70 ? 'text-red-600' :
+                  avgRisk >= 45 ? 'text-amber-600' :
+                  'text-slate-900'
+                }`} />
+              </div>
+              <div className={`group flex items-center gap-2 px-3 py-1.5 rounded-full backdrop-blur-xl border shadow-lg transition-all cursor-default ${anomalyCount > 0 ? 'bg-red-100/50 border-red-200/60 hover:bg-red-100/70' : 'bg-white/50 border-white/60 hover:bg-white/70'} hover:shadow-xl`}>
+                {anomalyCount > 0 && <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" />}
+                <span className="text-xs font-semibold text-slate-600">Anomalies</span>
+                <NumberTicker value={anomalyCount} className={`text-sm font-bold ${anomalyCount > 0 ? 'text-red-600' : 'text-slate-900'}`} />
+              </div>
+              <div className={`group flex items-center gap-2 px-3 py-1.5 rounded-full backdrop-blur-xl border shadow-lg transition-all cursor-default ${badTradeCount > 0 ? 'bg-amber-100/50 border-amber-200/60 hover:bg-amber-100/70' : 'bg-white/50 border-white/60 hover:bg-white/70'} hover:shadow-xl`}>
+                {badTradeCount > 0 && <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />}
+                <span className="text-xs font-semibold text-slate-600">Bad</span>
+                <NumberTicker value={badTradeCount} className={`text-sm font-bold ${badTradeCount > 0 ? 'text-amber-600' : 'text-slate-900'}`} />
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setUseRealData(!useRealData)}
+              className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all shadow-sm ${
+                useRealData
+                  ? "bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-emerald-500/25"
+                  : "bg-white/80 text-slate-600 border border-slate-200/60"
+              }`}
+            >
+              {useRealData ? "LIVE" : "MOCK"}
+            </button>
+            {!useRealData && (
+              <Input
+                type="number"
+                min="1"
+                max="12"
+                value={tradesPerAgent}
+                onChange={(event) => {
+                  const value = Number(event.target.value);
+                  if (Number.isNaN(value)) {
+                    setTradesPerAgent(1);
+                    return;
+                  }
+                  setTradesPerAgent(clamp(Math.floor(value), 1, 12));
+                }}
+                className="h-8 w-14 text-xs rounded-lg bg-white/80 border-slate-200/60"
+              />
             )}
             {useRealData ? (
               <>
-                <Button
+                <ShimmerButton
                   onClick={() => setIsRunning(!isRunning)}
-                  variant={isRunning ? "destructive" : "default"}
-                  size="sm"
+                  shimmerColor={isRunning ? "#ef4444" : "#10b981"}
+                  background={isRunning ? "rgba(239, 68, 68, 0.9)" : "rgba(16, 185, 129, 0.9)"}
+                  borderRadius="8px"
+                  className="text-xs font-bold px-4 py-2"
                 >
-                  {isRunning ? "Stop" : "Start"} agents
-                </Button>
+                  {isRunning ? "Stop" : "Start"} Agents
+                </ShimmerButton>
                 <Button
                   onClick={triggerAgents}
                   variant="outline"
                   size="sm"
                   disabled={isTriggering}
+                  className="rounded-lg font-semibold bg-white/80 border-slate-200/60 hover:bg-white"
                 >
-                  {isTriggering ? "Triggering..." : "Trigger once"}
+                  {isTriggering ? "..." : "Trigger"}
                 </Button>
-                {lastTriggerResult && (
-                  <span className="text-xs text-muted-foreground">
-                    {lastTriggerResult}
-                  </span>
-                )}
               </>
             ) : (
               <>
-                <Button
+                <ShimmerButton
                   onClick={toggleSimulation}
-                  variant={isRunning ? "destructive" : "default"}
-                  size="sm"
+                  shimmerColor={isRunning ? "#ef4444" : "#6366f1"}
+                  background={isRunning ? "rgba(239, 68, 68, 0.9)" : "rgba(99, 102, 241, 0.9)"}
+                  borderRadius="8px"
+                  className="text-xs font-bold px-4 py-2"
                 >
-                  {isRunning ? "Stop" : "Start"} simulation
-                </Button>
-                <Button onClick={injectBadTrade} variant="outline" size="sm">
-                  Inject bad trade
+                  {isRunning ? "Stop" : "Start"} Sim
+                </ShimmerButton>
+                <Button onClick={injectBadTrade} variant="outline" size="sm" className="rounded-lg font-semibold bg-white/80 border-slate-200/60">
+                  Inject
                 </Button>
               </>
             )}
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card size="sm">
-            <CardContent className="pt-4">
-              <p className="text-muted-foreground text-xs">Active agents</p>
-              <p className="text-2xl font-semibold">{activeAgents}</p>
-              <p className="text-[11px] text-muted-foreground">
-                Dormant: {AGENTS.length - activeAgents}
-              </p>
-            </CardContent>
-          </Card>
-          <Card size="sm">
-            <CardContent className="pt-4">
-              <p className="text-muted-foreground text-xs">Avg risk score</p>
-              <p className="text-2xl font-semibold">
-                {formatNumber(avgRisk, 1)}
-              </p>
-              <p className="text-[11px] text-muted-foreground">
-                Rolling 12m window
-              </p>
-            </CardContent>
-          </Card>
-          <Card size="sm">
-            <CardContent className="pt-4">
-              <p className="text-muted-foreground text-xs">Recent anomalies</p>
-              <p className="text-2xl font-semibold text-red-600">
-                {anomalyCount}
-              </p>
-              <p className="text-[11px] text-muted-foreground">
-                Anomalous or rogue points
-              </p>
-            </CardContent>
-          </Card>
-          <Card size="sm">
-            <CardContent className="pt-4">
-              <p className="text-muted-foreground text-xs">
-                Bad trades flagged
-              </p>
-              <p className="text-2xl font-semibold text-amber-600">
-                {badTradeCount}
-              </p>
-              <p className="text-[11px] text-muted-foreground">
-                Objective trade rules
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className="grid lg:grid-cols-[2.2fr_1fr] gap-6">
-          <Card className="h-full">
-            <CardHeader>
-              <CardTitle>Fleet behavior timeline</CardTitle>
-              <CardDescription>
-                All agents plotted together. Click any point to inspect the
-                decision and behavior.
-              </CardDescription>
-              <CardAction>
-                <Badge variant="outline" className="text-xs">
-                  Auto zoom: {visibleWindowLabel}m
-                </Badge>
-              </CardAction>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="relative overflow-visible rounded-2xl border border-white/70 bg-white/40 p-4 shadow-[0_20px_60px_-30px_rgba(15,23,42,0.45)] backdrop-blur-xl">
-                <div className="pointer-events-none absolute inset-0 rounded-2xl bg-gradient-to-br from-white/70 via-white/30 to-slate-100/40" />
-                <div className="relative z-10">
-                  <div ref={chartWrapRef} className="relative">
-                    {trades.length === 0 ? (
-                      <div className="flex h-64 items-center justify-center text-sm text-muted-foreground">
-                        No trades yet. Start the simulation or add a manual
-                        trade.
-                      </div>
-                    ) : (
-                      <svg
-                        viewBox={`0 0 ${chartWidth} ${chartHeight}`}
-                        className="block h-64 w-full drop-shadow-sm"
-                        role="img"
-                        aria-label="Behavior risk timeline"
-                      >
-                        {[0, 25, 50, 75, 100].map((level) => {
-                          const y = getY(level);
-                          return (
-                            <g key={level}>
-                              <line
-                                x1={chartPadding.left}
-                                x2={chartWidth - chartPadding.right}
-                                y1={y}
-                                y2={y}
-                                stroke="#e2e8f0"
-                                strokeWidth="1"
-                              />
-                              <text
-                                x={8}
-                                y={y + 4}
-                                fontSize="10"
-                                fill="#94a3b8"
-                              >
-                                {level}
-                              </text>
-                            </g>
-                          );
-                        })}
-
-                        {selectedPoint && (
-                          <line
-                            x1={selectedPoint.x}
-                            x2={selectedPoint.x}
-                            y1={chartPadding.top}
-                            y2={chartHeight - chartPadding.bottom}
-                            stroke="#94a3b8"
-                            strokeDasharray="4 4"
-                            strokeWidth="1"
-                            pointerEvents="none"
-                          />
-                        )}
-
-                        {AGENTS.map((agentMeta) => {
-                          const points = chartTradesByAgent[agentMeta.id].map(
-                            (trade) => ({
-                              trade,
-                              x: getX(trade.timestamp.getTime()),
-                              y: getY(trade.riskScore),
-                            }),
-                          );
-                          if (!points.length) return null;
-                          const linePoints = points
-                            .map((point) => `${point.x},${point.y}`)
-                            .join(" ");
-                          return (
-                            <g key={agentMeta.id}>
-                              <polyline
-                                points={linePoints}
-                                fill="none"
-                                stroke={agentMeta.color}
-                                strokeWidth="2"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              />
-                              {points.map((point) => {
-                                const isSelected =
-                                  selectedTradeId === point.trade.id;
-                                const radius = point.trade.isBadTrade ? 5 : 4;
-                                return (
-                                  <g key={point.trade.id}>
-                                    <circle
-                                      cx={point.x}
-                                      cy={point.y}
-                                      r={radius + 6}
-                                      fill="transparent"
-                                      stroke="transparent"
-                                      className="cursor-pointer"
-                                      onClick={() =>
-                                        setSelectedTradeId(point.trade.id)
-                                      }
-                                    />
-                                    <circle
-                                      cx={point.x}
-                                      cy={point.y}
-                                      r={isSelected ? radius + 2 : radius}
-                                      fill={agentMeta.color}
-                                      stroke={
-                                        isSelected
-                                          ? "#0f172a"
-                                          : point.trade.isBadTrade
-                                            ? "#0f172a"
-                                            : "transparent"
-                                      }
-                                      strokeWidth={
-                                        isSelected
-                                          ? 2
-                                          : point.trade.isBadTrade
-                                            ? 1.5
-                                            : 0
-                                      }
-                                      pointerEvents="none"
-                                    >
-                                      <title>
-                                        {agentMeta.name} {point.trade.action}{" "}
-                                        {formatNumber(point.trade.amount)}{" "}
-                                        {point.trade.token} -{" "}
-                                        {behaviorLabels[point.trade.behavior]}
-                                      </title>
-                                    </circle>
-                                  </g>
-                                );
-                              })}
-                            </g>
-                          );
-                        })}
-                      </svg>
-                    )}
-                    {selectedTrade && tooltipPosition && (
-                      <div
-                        className="pointer-events-none absolute z-20 rounded-xl border border-white/70 bg-white/80 px-3 py-2 text-xs text-slate-700 shadow-xl backdrop-blur-xl"
-                        style={{
-                          left: tooltipPosition.left,
-                          top: tooltipPosition.top,
-                          width: tooltipWidth,
-                          transform: "translate(-50%, calc(-100% - 16px))",
-                        }}
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-2">
-                            <span
-                              className={`h-2 w-2 rounded-full ${agentMap[selectedTrade.agent].dot}`}
-                            />
-                            <p className="text-xs font-semibold text-slate-900">
-                              {agentMap[selectedTrade.agent].name}{" "}
-                              {selectedTrade.action.toUpperCase()}
-                            </p>
-                          </div>
-                          <Badge
-                            variant="outline"
-                            className={`text-[10px] ${behaviorBadgeClasses[selectedTrade.behavior]}`}
-                          >
-                            {behaviorLabels[selectedTrade.behavior]}
-                          </Badge>
-                        </div>
-                        <p className="mt-1 text-[11px] text-slate-600">
-                          {formatNumber(selectedTrade.amount)}{" "}
-                          {selectedTrade.token} - {selectedTrade.strategy}
-                        </p>
-                        <p className="mt-1 text-[11px] text-slate-500">
-                          {selectedTrade.decision}
-                        </p>
-                        <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] text-slate-600">
-                          <div>
-                            Risk{" "}
-                            <span className="font-semibold text-slate-900">
-                              {selectedTrade.riskScore}
-                            </span>
-                          </div>
-                          <div>
-                            Impact{" "}
-                            <span className="font-semibold text-slate-900">
-                              {formatNumber(selectedTrade.priceImpact, 2)}%
-                            </span>
-                          </div>
-                          <div>
-                            Confidence{" "}
-                            <span className="font-semibold text-slate-900">
-                              {formatNumber(selectedTrade.confidence * 100, 0)}%
-                            </span>
-                          </div>
-                          <div>
-                            Window{" "}
-                            <span className="font-semibold text-slate-900">
-                              {selectedTrade.window.tradeCount} trades
-                            </span>
-                          </div>
-                        </div>
-                        <p className="mt-2 text-[11px] text-slate-500">
-                          {selectedTrade.behaviorReason}
-                        </p>
-                        {selectedTrade.isBadTrade &&
-                          selectedTrade.badReason && (
-                            <p className="mt-1 text-[11px] font-semibold text-rose-600">
-                              Bad trade: {selectedTrade.badReason}
-                            </p>
-                          )}
-                        <span className="absolute left-1/2 top-full h-3 w-3 -translate-x-1/2 -translate-y-1/2 rotate-45 border-b border-r border-white/70 bg-white/80" />
-                      </div>
-                    )}
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-3 text-xs text-muted-foreground">
-                    {AGENTS.map((agentMeta) => (
-                      <div
-                        key={agentMeta.id}
-                        className="flex items-center gap-2"
-                      >
-                        <span
-                          className={`h-2 w-2 rounded-full ${agentMeta.dot}`}
-                        />
-                        <span>{agentMeta.name}</span>
-                      </div>
-                    ))}
-                    <div className="flex items-center gap-2">
-                      <span className="h-2 w-2 rounded-full border border-slate-400 bg-white" />
-                      <span>Bad trade marker</span>
-                    </div>
-                  </div>
-                  <div className="mt-2 flex items-center justify-between text-[11px] text-muted-foreground">
-                    <span suppressHydrationWarning>
-                      {new Date(minTime).toLocaleTimeString()}
-                    </span>
-                    <span suppressHydrationWarning>
-                      {new Date(maxTime).toLocaleTimeString()}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid md:grid-cols-2 gap-4">
-                <div className="rounded-lg border bg-white/70 p-4 space-y-3">
+            <Dialog open={isConfigOpen} onOpenChange={setIsConfigOpen}>
+              <DialogTrigger render={<Button variant="outline" size="sm" className="rounded-lg font-semibold bg-white/80 border-slate-200/60" />}>
+                  Config
+              </DialogTrigger>
+              <DialogContent className="max-w-md bg-white/95 backdrop-blur-xl border-slate-200/60">
+                <DialogHeader>
+                  <DialogTitle>Agent Configuration</DialogTitle>
+                  <DialogDescription>
+                    Set behavior parameters for agents.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 pt-2">
                   <div>
-                    <p className="text-xs text-muted-foreground">
-                      Classification signals
-                    </p>
-                    <p className="text-sm font-semibold">
-                      Over time, not one trade
-                    </p>
-                  </div>
-                  <div className="space-y-2 text-xs text-muted-foreground">
-                    <div className="flex items-center justify-between">
-                      <span>Frequency vs baseline</span>
-                      <span className="font-medium text-foreground">
-                        Rolling 12m
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span>Position sizing drift</span>
-                      <span className="font-medium text-foreground">
-                        Avg notional
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span>Price impact trend</span>
-                      <span className="font-medium text-foreground">
-                        Impact delta
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span>Bad trade rules</span>
-                      <span className="font-medium text-foreground">
-                        Objective flags
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span>Classification</span>
-                      <span className="font-medium text-foreground">
-                        Conservative to rogue
-                      </span>
-                    </div>
-                  </div>
-                  <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-muted-foreground">
-                    Spectra grades behavior over rolling windows to avoid
-                    punishing a single mistake.
-                  </div>
-                </div>
-
-                <div className="rounded-lg border bg-white/70 p-4 space-y-3">
-                  <div>
-                    <p className="text-xs text-muted-foreground">
-                      Adaptive timeline
-                    </p>
-                    <p className="text-sm font-semibold">
-                      Zooms with trading cadence
-                    </p>
-                  </div>
-                  <div className="space-y-2 text-xs text-muted-foreground">
-                    <div className="flex items-center justify-between">
-                      <span>Visible window</span>
-                      <span className="font-medium text-foreground">
-                        {visibleWindowLabel}m
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span>Behavior window</span>
-                      <span className="font-medium text-foreground">12m</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span>Trades per agent</span>
-                      <span className="font-medium text-foreground">
-                        {tradesPerAgent} / tick
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span>Tick interval</span>
-                      <span className="font-medium text-foreground">1.8s</span>
-                    </div>
-                  </div>
-                  <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-muted-foreground">
-                    Click any point to open a tooltip anchored to the selected
-                    decision.
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <div className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Manual trade</CardTitle>
-                <CardDescription>
-                  Send a specific trade for classification.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <form
-                  onSubmit={submitTrade}
-                  className="space-y-3"
-                  suppressHydrationWarning
-                >
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <Label className="text-xs">Agent</Label>
-                      <Select
-                        value={agent}
-                        onValueChange={(value) => setAgent(value as AgentId)}
-                      >
-                        <SelectTrigger
-                          className="w-full mt-1"
-                          suppressHydrationWarning
-                        >
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {AGENTS.map((agentMeta) => (
-                            <SelectItem key={agentMeta.id} value={agentMeta.id}>
-                              {agentMeta.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <Label className="text-xs">Action</Label>
-                      <Select
-                        value={action}
-                        onValueChange={(value) =>
-                          setAction(value as TradeAction)
-                        }
-                      >
-                        <SelectTrigger
-                          className="w-full mt-1"
-                          suppressHydrationWarning
-                        >
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {ACTIONS.map((item) => (
-                            <SelectItem key={item} value={item}>
-                              {item.toUpperCase()}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <Label className="text-xs">Token</Label>
-                      <Select
-                        value={token}
-                        onValueChange={(value) => value && setToken(value)}
-                      >
-                        <SelectTrigger
-                          className="w-full mt-1"
-                          suppressHydrationWarning
-                        >
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {TOKENS.map((item) => (
-                            <SelectItem key={item} value={item}>
-                              {item}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <Label className="text-xs">Amount</Label>
-                      <Input
-                        type="number"
-                        placeholder="0"
-                        value={amount}
-                        onChange={(event) => setAmount(event.target.value)}
-                        className="mt-1"
-                      />
-                    </div>
-                  </div>
-                  <Button
-                    type="submit"
-                    className="w-full"
-                    suppressHydrationWarning
-                  >
-                    Submit trade
-                  </Button>
-                </form>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Agent Config</CardTitle>
-                <CardDescription>
-                  Set behavior parameters for agents.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {/* Agent Selection */}
-                <div>
-                  <Label className="text-xs mb-2 block">Select Agent</Label>
-                  <Select
-                    value={selectedAgentForConfig}
-                    onValueChange={(value) =>
-                      setSelectedAgentForConfig(value as AgentId)
-                    }
-                  >
-                    <SelectTrigger className="w-full" suppressHydrationWarning>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {AGENTS.map((agentMeta) => (
-                        <SelectItem key={agentMeta.id} value={agentMeta.id}>
-                          {agentMeta.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Current Config Display */}
-                {agentConfigs[selectedAgentForConfig] &&
-                  Object.keys(agentConfigs[selectedAgentForConfig]).length >
-                    0 && (
-                    <div className="rounded-md bg-slate-50 p-3 text-xs">
-                      <p className="font-semibold mb-2 text-foreground">
-                        Current Config:
-                      </p>
-                      <pre className="text-xs whitespace-pre-wrap break-words text-muted-foreground">
-                        {JSON.stringify(
-                          agentConfigs[selectedAgentForConfig],
-                          null,
-                          2,
-                        )}
-                      </pre>
-                    </div>
-                  )}
-
-                {/* Form Fields */}
-                <div className="space-y-3" suppressHydrationWarning>
-                  {/* Max Position Size */}
-                  <div>
-                    <Label className="text-xs mb-1 block">
-                      Max Position Size
-                    </Label>
-                    <Input
-                      type="number"
-                      placeholder="e.g., 10000"
-                      value={formConfig.maxPositionSize || ""}
-                      onChange={(e) =>
-                        setFormConfig((prev) => ({
-                          ...prev,
-                          maxPositionSize: e.target.value
-                            ? parseFloat(e.target.value)
-                            : undefined,
-                        }))
-                      }
-                      className="text-xs"
-                    />
-                  </div>
-
-                  {/* Max Daily Loss */}
-                  <div>
-                    <Label className="text-xs mb-1 block">Max Daily Loss</Label>
-                    <Input
-                      type="number"
-                      placeholder="e.g., 5000"
-                      value={formConfig.maxDailyLoss || ""}
-                      onChange={(e) =>
-                        setFormConfig((prev) => ({
-                          ...prev,
-                          maxDailyLoss: e.target.value
-                            ? parseFloat(e.target.value)
-                            : undefined,
-                        }))
-                      }
-                      className="text-xs"
-                    />
-                  </div>
-
-                  {/* Risk Tolerance */}
-                  <div>
-                    <Label className="text-xs mb-1 block">Risk Tolerance</Label>
+                    <Label className="text-sm mb-1.5 block">Agent</Label>
                     <Select
-                      value={formConfig.riskTolerance || ""}
-                      onValueChange={(value) =>
-                        setFormConfig((prev) => ({
-                          ...prev,
-                          riskTolerance: value as
-                            | "conservative"
-                            | "moderate"
-                            | "aggressive"
-                            | undefined,
-                        }))
-                      }
+                      value={selectedAgentForConfig}
+                      onValueChange={(value) => setSelectedAgentForConfig(value as AgentId)}
                     >
-                      <SelectTrigger
-                        className="w-full text-xs"
-                        suppressHydrationWarning
-                      >
-                        <SelectValue placeholder="Select risk level" />
+                      <SelectTrigger>
+                        <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="conservative">
-                          Conservative
-                        </SelectItem>
-                        <SelectItem value="moderate">Moderate</SelectItem>
-                        <SelectItem value="aggressive">Aggressive</SelectItem>
+                        {AGENTS.map((agentMeta) => (
+                          <SelectItem key={agentMeta.id} value={agentMeta.id}>
+                            {agentMeta.name}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
-
-                  {/* Max Frequency Per Minute */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label className="text-sm mb-1.5 block">Max Position</Label>
+                      <Input
+                        type="number"
+                        placeholder="10000"
+                        value={formConfig.maxPositionSize || ""}
+                        onChange={(e) =>
+                          setFormConfig((prev) => ({
+                            ...prev,
+                            maxPositionSize: e.target.value ? parseFloat(e.target.value) : undefined,
+                          }))
+                        }
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-sm mb-1.5 block">Max Daily Loss</Label>
+                      <Input
+                        type="number"
+                        placeholder="5000"
+                        value={formConfig.maxDailyLoss || ""}
+                        onChange={(e) =>
+                          setFormConfig((prev) => ({
+                            ...prev,
+                            maxDailyLoss: e.target.value ? parseFloat(e.target.value) : undefined,
+                          }))
+                        }
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label className="text-sm mb-1.5 block">Risk Tolerance</Label>
+                      <Select
+                        value={formConfig.riskTolerance || ""}
+                        onValueChange={(value) =>
+                          setFormConfig((prev) => ({
+                            ...prev,
+                            riskTolerance: value as "conservative" | "moderate" | "aggressive" | undefined,
+                          }))
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="conservative">Conservative</SelectItem>
+                          <SelectItem value="moderate">Moderate</SelectItem>
+                          <SelectItem value="aggressive">Aggressive</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label className="text-sm mb-1.5 block">Max Freq/Min</Label>
+                      <Input
+                        type="number"
+                        placeholder="5"
+                        value={formConfig.maxFrequencyPerMin || ""}
+                        onChange={(e) =>
+                          setFormConfig((prev) => ({
+                            ...prev,
+                            maxFrequencyPerMin: e.target.value ? parseFloat(e.target.value) : undefined,
+                          }))
+                        }
+                      />
+                    </div>
+                  </div>
                   <div>
-                    <Label className="text-xs mb-1 block">
-                      Max Frequency Per Minute
-                    </Label>
+                    <Label className="text-sm mb-1.5 block">Preferred Tokens</Label>
                     <Input
-                      type="number"
-                      placeholder="e.g., 5"
-                      value={formConfig.maxFrequencyPerMin || ""}
+                      placeholder="SOL, USDC, JUP"
+                      value={formConfig.preferredTokens ? formConfig.preferredTokens.join(", ") : ""}
                       onChange={(e) =>
                         setFormConfig((prev) => ({
                           ...prev,
-                          maxFrequencyPerMin: e.target.value
-                            ? parseFloat(e.target.value)
-                            : undefined,
+                          preferredTokens: e.target.value ? e.target.value.split(",").map((t) => t.trim()) : undefined,
                         }))
                       }
-                      className="text-xs"
                     />
                   </div>
-
-                  {/* Preferred Tokens */}
-                  <div>
-                    <Label className="text-xs mb-1 block">
-                      Preferred Tokens (comma separated)
-                    </Label>
-                    <Input
-                      type="text"
-                      placeholder="e.g., SOL, USDC, JUP"
-                      value={
-                        formConfig.preferredTokens
-                          ? formConfig.preferredTokens.join(", ")
-                          : ""
-                      }
-                      onChange={(e) =>
-                        setFormConfig((prev) => ({
-                          ...prev,
-                          preferredTokens: e.target.value
-                            ? e.target.value.split(",").map((t) => t.trim())
-                            : undefined,
-                        }))
-                      }
-                      className="text-xs"
-                    />
-                  </div>
-
-                  {/* Allowed Strategies */}
-                  <div>
-                    <Label className="text-xs mb-1 block">
-                      Allowed Strategies (comma separated)
-                    </Label>
-                    <Input
-                      type="text"
-                      placeholder="e.g., momentum, mean reversion"
-                      value={
-                        formConfig.allowedStrategies
-                          ? formConfig.allowedStrategies.join(", ")
-                          : ""
-                      }
-                      onChange={(e) =>
-                        setFormConfig((prev) => ({
-                          ...prev,
-                          allowedStrategies: e.target.value
-                            ? e.target.value.split(",").map((s) => s.trim())
-                            : undefined,
-                        }))
-                      }
-                      className="text-xs"
-                    />
-                  </div>
-
-                  {/* Description */}
-                  <div>
-                    <Label className="text-xs mb-1 block">Description</Label>
-                    <Textarea
-                      placeholder="Brief description of this configuration"
-                      value={formConfig.description || ""}
-                      onChange={(e) =>
-                        setFormConfig((prev) => ({
-                          ...prev,
-                          description: e.target.value || undefined,
-                        }))
-                      }
-                      className="text-xs min-h-[60px]"
-                    />
-                  </div>
-                </div>
-
-                {/* File Upload */}
-                <div>
-                  <Label className="text-xs mb-2 block">
-                    Or Upload JSON File
-                  </Label>
-                  <label className="w-full block">
-                    <input
-                      type="file"
-                      accept=".json"
-                      onChange={handleConfigUpload}
-                      className="hidden"
-                      id="config-file-input"
-                    />
+                  <div className="flex gap-2 pt-2">
                     <Button
-                      type="button"
-                      variant="outline"
-                      className="w-full text-xs cursor-pointer"
-                      onClick={() =>
-                        document.getElementById("config-file-input")?.click()
-                      }
-                      suppressHydrationWarning
+                      onClick={() => {
+                        handleApplyConfig();
+                        setIsConfigOpen(false);
+                      }}
+                      className="flex-1"
                     >
-                      📁 Choose File
+                      Apply
                     </Button>
-                  </label>
-                </div>
-
-                {/* Action Buttons */}
-                <div className="flex gap-2">
-                  <Button
-                    onClick={handleApplyConfig}
-                    variant="default"
-                    className="flex-1 text-xs"
-                    suppressHydrationWarning
-                  >
-                    Apply Config
-                  </Button>
-                  <Button
-                    onClick={downloadConfigTemplate}
-                    variant="outline"
-                    className="flex-1 text-xs"
-                    suppressHydrationWarning
-                  >
-                    Download Template
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Behavior labels</CardTitle>
-                <CardDescription>Aligned with Spectra pitch.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {(
-                  [
-                    "conservative",
-                    "aggressive",
-                    "anomalous",
-                    "rogue",
-                    "dormant",
-                  ] as AgentBehavior[]
-                ).map((label) => (
-                  <div
-                    key={label}
-                    className="flex items-center justify-between text-xs"
-                  >
-                    <Badge
-                      variant="outline"
-                      className={behaviorBadgeClasses[label]}
-                    >
-                      {behaviorLabels[label]}
-                    </Badge>
-                    <span className="text-muted-foreground">
-                      {label === "conservative" && "Low risk, steady cadence"}
-                      {label === "aggressive" &&
-                        "Higher frequency, larger size"}
-                      {label === "anomalous" && "Deviation from baseline"}
-                      {label === "rogue" && "Critical, possible compromise"}
-                      {label === "dormant" && "Inactive beyond expected window"}
-                    </span>
+                    <Button onClick={downloadConfigTemplate} variant="outline" className="flex-1">
+                      Template
+                    </Button>
                   </div>
-                ))}
-              </CardContent>
-            </Card>
+                </div>
+              </DialogContent>
+            </Dialog>
           </div>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Agent performance table</CardTitle>
-            <CardDescription>
-              Overall stats and average behavior for each agent in the fleet.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="text-left text-muted-foreground border-b">
-                    <th className="py-2 pr-4">Agent</th>
-                    <th className="py-2 pr-4">Trades</th>
-                    <th className="py-2 pr-4">Avg notional</th>
-                    <th className="py-2 pr-4">Avg risk</th>
-                    <th className="py-2 pr-4">Avg confidence</th>
-                    <th className="py-2 pr-4">Bad trades</th>
-                    <th className="py-2 pr-4">Avg behavior</th>
-                    <th className="py-2">Last seen</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {agentStats.map((stat) => (
-                    <tr key={stat.id} className="border-b last:border-b-0">
-                      <td className="py-3 pr-4">
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={`h-2 w-2 rounded-full ${stat.dot}`}
-                          />
-                          <div>
-                            <p className="font-medium text-foreground">
-                              {stat.name}
-                            </p>
-                            <p className="text-[11px] text-muted-foreground">
-                              {stat.role}
-                            </p>
+        {/* Chart Card */}
+        <div className="relative rounded-2xl">
+          <ShineBorder
+            shineColor={["#a78bfa", "#60a5fa", "#34d399"]}
+            borderWidth={2}
+            duration={8}
+            className="rounded-2xl"
+          />
+          <Card className="border border-white/60 bg-white/50 backdrop-blur-xl rounded-2xl shadow-2xl shadow-slate-300/30 overflow-visible">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <CardTitle className="text-sm font-bold tracking-tight text-slate-900">Behavior Timeline</CardTitle>
+                  <span className="px-2 py-0.5 rounded-full bg-slate-100 text-[10px] font-semibold text-slate-500">
+                    {visibleWindowLabel}m window
+                  </span>
+                </div>
+                <div className="flex items-center gap-4">
+                  {AGENTS.map((agentMeta) => (
+                    <div key={agentMeta.id} className="flex items-center gap-1.5">
+                      <span className={`h-2.5 w-2.5 rounded-full ${agentMeta.dot} shadow-sm`} />
+                      <span className="text-xs font-semibold text-slate-600">{agentMeta.name}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="pt-0 pb-4 overflow-visible">
+              <div
+                ref={chartWrapRef}
+                className="relative rounded-xl bg-gradient-to-br from-slate-100/80 via-white/60 to-slate-50/80 border border-white/80 p-4"
+                onMouseLeave={() => setHoveredTradeId(null)}
+              >
+                {trades.length === 0 ? (
+                  <div className="flex h-[400px] items-center justify-center">
+                    <div className="text-center">
+                      <div className="relative">
+                        <div className="absolute inset-0 bg-gradient-to-r from-violet-400/20 via-sky-400/20 to-emerald-400/20 blur-2xl rounded-full" />
+                        <div className="relative flex items-center justify-center mb-4">
+                          <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-slate-100 to-slate-50 flex items-center justify-center border border-slate-200/60 shadow-sm">
+                            <svg className="h-6 w-6 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
+                            </svg>
                           </div>
                         </div>
-                      </td>
-                      <td className="py-3 pr-4">{stat.totalTrades}</td>
-                      <td className="py-3 pr-4">
-                        {formatNumber(stat.avgAmount, 0)}
-                      </td>
-                      <td className="py-3 pr-4">
-                        {formatNumber(stat.avgRisk, 1)}
-                      </td>
-                      <td className="py-3 pr-4">
-                        {formatNumber(stat.avgConfidence * 100, 0)}%
-                      </td>
-                      <td className="py-3 pr-4">{stat.badTrades}</td>
-                      <td className="py-3 pr-4">
-                        <Badge
-                          variant="outline"
-                          className={
-                            behaviorBadgeClasses[stat.behavior as AgentBehavior]
-                          }
-                        >
-                          {behaviorLabels[stat.behavior as AgentBehavior]}
-                        </Badge>
-                      </td>
-                      <td className="py-3" suppressHydrationWarning>
-                        {stat.lastSeen ? stat.lastSeen.toLocaleTimeString() : "--"}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                      </div>
+                      <div className="text-sm font-bold text-slate-600">No trades yet</div>
+                      <div className="text-xs text-slate-400 mt-1.5 max-w-[200px]">Start the agents to begin monitoring behavior patterns</div>
+                    </div>
+                  </div>
+                ) : (
+                  <svg
+                    viewBox={`0 0 ${chartWidth} ${chartHeight}`}
+                    className="block h-[400px] w-full cursor-crosshair"
+                    role="img"
+                    aria-label="Behavior risk timeline"
+                    onMouseMove={handleChartMouseMove}
+                    onMouseLeave={() => setHoveredTradeId(null)}
+                  >
+                    {/* Background zones for risk levels */}
+                    <defs>
+                      <linearGradient id="dangerZone" x1="0%" y1="0%" x2="0%" y2="100%">
+                        <stop offset="0%" stopColor="#fecaca" stopOpacity="0.3" />
+                        <stop offset="100%" stopColor="#fecaca" stopOpacity="0.1" />
+                      </linearGradient>
+                      <linearGradient id="warningZone" x1="0%" y1="0%" x2="0%" y2="100%">
+                        <stop offset="0%" stopColor="#fef3c7" stopOpacity="0.25" />
+                        <stop offset="100%" stopColor="#fef3c7" stopOpacity="0.1" />
+                      </linearGradient>
+                      <linearGradient id="safeZone" x1="0%" y1="0%" x2="0%" y2="100%">
+                        <stop offset="0%" stopColor="#d1fae5" stopOpacity="0.2" />
+                        <stop offset="100%" stopColor="#d1fae5" stopOpacity="0.05" />
+                      </linearGradient>
+                    </defs>
+
+                    {/* Risk zone backgrounds */}
+                    <rect x={chartPadding.left} y={getY(100)} width={chartInnerWidth} height={getY(70) - getY(100)} fill="url(#dangerZone)" />
+                    <rect x={chartPadding.left} y={getY(70)} width={chartInnerWidth} height={getY(45) - getY(70)} fill="url(#warningZone)" />
+                    <rect x={chartPadding.left} y={getY(45)} width={chartInnerWidth} height={getY(0) - getY(45)} fill="url(#safeZone)" />
+
+                    {/* Detailed grid lines - every 5 */}
+                    {[0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100].map((level) => {
+                      const y = getY(level);
+                      const isMainLine = level % 25 === 0;
+                      const isMidLine = level % 10 === 0 && !isMainLine;
+                      return (
+                        <g key={level}>
+                          <line
+                            x1={chartPadding.left}
+                            x2={chartWidth - chartPadding.right}
+                            y1={y}
+                            y2={y}
+                            stroke={isMainLine ? "#94a3b8" : isMidLine ? "#cbd5e1" : "#e2e8f0"}
+                            strokeWidth={isMainLine ? "1" : "0.5"}
+                            strokeDasharray={isMainLine ? "" : isMidLine ? "4 4" : "2 6"}
+                            strokeOpacity={isMainLine ? 0.6 : isMidLine ? 0.5 : 0.4}
+                          />
+                          {isMainLine && (
+                            <text x={6} y={y + 3} fontSize="9" fontWeight="600" fill="#64748b">
+                              {level}
+                            </text>
+                          )}
+                        </g>
+                      );
+                    })}
+
+                    {/* Threshold labels on right side */}
+                    <text x={chartWidth - chartPadding.right + 5} y={getY(85)} fontSize="8" fontWeight="600" fill="#dc2626" opacity="0.7">ROGUE</text>
+                    <text x={chartWidth - chartPadding.right + 5} y={getY(57)} fontSize="8" fontWeight="600" fill="#d97706" opacity="0.7">WARNING</text>
+                    <text x={chartWidth - chartPadding.right + 5} y={getY(22)} fontSize="8" fontWeight="600" fill="#059669" opacity="0.7">SAFE</text>
+
+                    {/* Vertical time grid lines */}
+                    {[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9].map((pct) => {
+                      const x = chartPadding.left + pct * chartInnerWidth;
+                      return (
+                        <line
+                          key={pct}
+                          x1={x}
+                          x2={x}
+                          y1={chartPadding.top}
+                          y2={chartHeight - chartPadding.bottom}
+                          stroke="#e2e8f0"
+                          strokeWidth="0.5"
+                          strokeDasharray="2 6"
+                          strokeOpacity="0.5"
+                        />
+                      );
+                    })}
+
+                    {/* Hovered point indicator line */}
+                    {hoveredPoint && (
+                      <line
+                        x1={hoveredPoint.x}
+                        x2={hoveredPoint.x}
+                        y1={chartPadding.top}
+                        y2={chartHeight - chartPadding.bottom}
+                        stroke="#94a3b8"
+                        strokeDasharray="4 4"
+                        strokeWidth="1"
+                        pointerEvents="none"
+                      />
+                    )}
+
+                    {/* Agent lines and points */}
+                    {AGENTS.map((agentMeta) => {
+                      const points = chartTradesByAgent[agentMeta.id].map((trade) => ({
+                        trade,
+                        x: getX(trade.timestamp.getTime()),
+                        y: getY(trade.riskScore),
+                      }));
+                      if (!points.length) return null;
+                      const linePoints = points.map((point) => `${point.x},${point.y}`).join(" ");
+                      return (
+                        <g key={agentMeta.id}>
+                          {/* Gradient fill under line */}
+                          <defs>
+                            <linearGradient id={`gradient-${agentMeta.id}`} x1="0%" y1="0%" x2="0%" y2="100%">
+                              <stop offset="0%" stopColor={agentMeta.color} stopOpacity="0.15" />
+                              <stop offset="100%" stopColor={agentMeta.color} stopOpacity="0" />
+                            </linearGradient>
+                          </defs>
+                          {points.length > 1 && (
+                            <polygon
+                              points={`${points[0].x},${chartHeight - chartPadding.bottom} ${linePoints} ${points[points.length - 1].x},${chartHeight - chartPadding.bottom}`}
+                              fill={`url(#gradient-${agentMeta.id})`}
+                            />
+                          )}
+                          <polyline
+                            points={linePoints}
+                            fill="none"
+                            stroke={agentMeta.color}
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                          {points.map((point) => {
+                            const isHovered = hoveredTradeId === point.trade.id;
+                            const radius = point.trade.isBadTrade ? 5 : 3.5;
+                            return (
+                              <circle
+                                key={point.trade.id}
+                                cx={point.x}
+                                cy={point.y}
+                                r={isHovered ? radius + 3 : radius}
+                                fill={agentMeta.color}
+                                stroke={isHovered ? "#0f172a" : point.trade.isBadTrade ? "#dc2626" : "white"}
+                                strokeWidth={isHovered ? 2.5 : point.trade.isBadTrade ? 2 : 1.5}
+                                pointerEvents="none"
+                                className={isHovered ? "drop-shadow-lg" : ""}
+                                style={{ transition: 'all 0.15s ease-out' }}
+                              />
+                            );
+                          })}
+                        </g>
+                      );
+                    })}
+                </svg>
+              )}
+              {hoveredTrade && (
+                <div
+                  className="pointer-events-none absolute z-20 rounded-xl border border-white/60 bg-white/80 backdrop-blur-2xl px-4 py-3 text-xs shadow-2xl shadow-slate-900/20"
+                  style={{
+                    left: mousePosition.x,
+                    top: mousePosition.y,
+                    width: tooltipWidth,
+                    transform: "translate(-50%, calc(-100% - 20px))",
+                    transition: "left 0.08s ease-out, top 0.08s ease-out",
+                  }}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5">
+                      <span className={`h-2.5 w-2.5 rounded-full ${agentMap[hoveredTrade.agent].dot} shadow-sm`} />
+                      <span className="font-bold text-slate-900">
+                        {agentMap[hoveredTrade.agent].name}
+                      </span>
+                      <span className="px-1.5 py-0.5 rounded bg-slate-100 text-[10px] font-bold text-slate-600 uppercase">
+                        {hoveredTrade.action}
+                      </span>
+                    </div>
+                    <Badge variant="outline" className={`text-[10px] font-bold ${behaviorBadgeClasses[hoveredTrade.behavior]}`}>
+                      {behaviorLabels[hoveredTrade.behavior]}
+                    </Badge>
+                  </div>
+                  <p className="mt-2 text-slate-700 font-semibold">
+                    <span className="font-mono">${formatNumber(hoveredTrade.amount)}</span> {hoveredTrade.token}
+                  </p>
+                  <div className="mt-2.5 grid grid-cols-2 gap-x-4 gap-y-1.5 text-[10px]">
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400 font-medium">Risk</span>
+                      <span className={`font-bold ${hoveredTrade.riskScore >= 70 ? 'text-red-600' : hoveredTrade.riskScore >= 45 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                        {hoveredTrade.riskScore}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400 font-medium">Impact</span>
+                      <span className="font-bold text-slate-800">{formatNumber(hoveredTrade.priceImpact, 2)}%</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400 font-medium">Confidence</span>
+                      <span className="font-bold text-slate-800">{formatNumber(hoveredTrade.confidence * 100, 0)}%</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400 font-medium">Window</span>
+                      <span className="font-bold text-slate-800">{hoveredTrade.window.tradeCount}</span>
+                    </div>
+                  </div>
+                  {hoveredTrade.isBadTrade && hoveredTrade.badReason && (
+                    <div className="mt-2.5 px-2 py-1.5 rounded-lg bg-red-50 border border-red-200/60">
+                      <p className="text-[10px] font-bold text-red-600 flex items-center gap-1">
+                        <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" />
+                        {hoveredTrade.badReason}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="mt-2 flex items-center justify-between text-xs text-slate-400">
+              <span suppressHydrationWarning>{new Date(minTime).toLocaleTimeString()}</span>
+              <span suppressHydrationWarning>{new Date(maxTime).toLocaleTimeString()}</span>
             </div>
           </CardContent>
-        </Card>
+          </Card>
+        </div>
+
+        {/* Agent Performance Table */}
+        <div className="relative rounded-2xl overflow-hidden">
+          <ShineBorder
+            shineColor={["#f9a8d4", "#fcd34d", "#a5f3fc"]}
+            borderWidth={2}
+            duration={10}
+            className="rounded-2xl"
+          />
+          <Card className="border border-white/60 bg-white/50 backdrop-blur-xl rounded-2xl shadow-2xl shadow-slate-300/30">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-bold tracking-tight text-slate-900">Agent Performance</CardTitle>
+                <span className="px-2 py-0.5 rounded-full bg-slate-100 text-[10px] font-semibold text-slate-500">
+                  {trades.length} trades
+                </span>
+              </div>
+            </CardHeader>
+            <CardContent className="pt-0 pb-4">
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-left text-slate-500 border-b border-slate-100/80">
+                      <th className="pb-2.5 pr-4 font-bold text-slate-600 tracking-wide uppercase text-[10px]">Agent</th>
+                      <th className="pb-2.5 pr-4 font-bold text-slate-600 tracking-wide uppercase text-[10px]">Trades</th>
+                      <th className="pb-2.5 pr-4 font-bold text-slate-600 tracking-wide uppercase text-[10px]">Avg Size</th>
+                      <th className="pb-2.5 pr-4 font-bold text-slate-600 tracking-wide uppercase text-[10px]">Avg Risk</th>
+                      <th className="pb-2.5 pr-4 font-bold text-slate-600 tracking-wide uppercase text-[10px]">Confidence</th>
+                      <th className="pb-2.5 pr-4 font-bold text-slate-600 tracking-wide uppercase text-[10px]">Bad</th>
+                      <th className="pb-2.5 pr-4 font-bold text-slate-600 tracking-wide uppercase text-[10px]">Behavior</th>
+                      <th className="pb-2.5 font-bold text-slate-600 tracking-wide uppercase text-[10px]">Last Seen</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-slate-700">
+                    {agentStats.map((stat, idx) => (
+                      <tr
+                        key={stat.id}
+                        className={`border-b border-slate-50/80 last:border-0 transition-colors hover:bg-slate-50/50 ${idx % 2 === 0 ? 'bg-slate-25/30' : ''}`}
+                      >
+                        <td className="py-3 pr-4">
+                          <div className="flex items-center gap-2">
+                            <span className={`h-2.5 w-2.5 rounded-full ${stat.dot} shadow-sm`} />
+                            <span className="font-bold text-slate-900">{stat.name}</span>
+                            <span className="text-[10px] text-slate-400 font-medium">{stat.role}</span>
+                          </div>
+                        </td>
+                        <td className="py-3 pr-4">
+                          <span className="font-semibold text-slate-800">{stat.totalTrades}</span>
+                        </td>
+                        <td className="py-3 pr-4">
+                          <span className="font-mono font-semibold text-slate-800">${formatNumber(stat.avgAmount, 0)}</span>
+                        </td>
+                        <td className="py-3 pr-4">
+                          <div className="flex items-center gap-1.5">
+                            <div className="w-12 h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                              <div
+                                className={`h-full rounded-full transition-all ${
+                                  stat.avgRisk >= 70 ? 'bg-gradient-to-r from-red-400 to-red-500' :
+                                  stat.avgRisk >= 45 ? 'bg-gradient-to-r from-amber-400 to-orange-400' :
+                                  'bg-gradient-to-r from-emerald-400 to-green-400'
+                                }`}
+                                style={{ width: `${stat.avgRisk}%` }}
+                              />
+                            </div>
+                            <span className="font-mono font-semibold text-slate-800">{formatNumber(stat.avgRisk, 1)}</span>
+                          </div>
+                        </td>
+                        <td className="py-3 pr-4">
+                          <div className="flex items-center gap-1.5">
+                            <div className="w-10 h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                              <div
+                                className="h-full rounded-full bg-gradient-to-r from-sky-400 to-blue-400"
+                                style={{ width: `${stat.avgConfidence * 100}%` }}
+                              />
+                            </div>
+                            <span className="font-mono font-semibold text-slate-800">{formatNumber(stat.avgConfidence * 100, 0)}%</span>
+                          </div>
+                        </td>
+                        <td className="py-3 pr-4">
+                          {stat.badTrades > 0 ? (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-red-50 border border-red-200/60">
+                              <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" />
+                              <span className="text-red-600 font-bold">{stat.badTrades}</span>
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 font-medium">0</span>
+                          )}
+                        </td>
+                        <td className="py-3 pr-4">
+                          <Badge variant="outline" className={`text-[10px] font-bold ${behaviorBadgeClasses[stat.behavior as AgentBehavior]}`}>
+                            {behaviorLabels[stat.behavior as AgentBehavior]}
+                          </Badge>
+                        </td>
+                        <td className="py-3 font-mono text-slate-500" suppressHydrationWarning>
+                          {stat.lastSeen ? stat.lastSeen.toLocaleTimeString() : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </main>
     </div>
   );
