@@ -104,8 +104,8 @@ const BASELINE: Baseline = { avgAmount: 2400, avgImpact: 1.2, freqPerMin: 0.3 };
 const behaviorBadgeClasses: Record<AgentBehavior, string> = {
   conservative: "border-emerald-200 bg-emerald-50 text-emerald-700",
   aggressive: "border-amber-200 bg-amber-50 text-amber-700",
-  anomalous: "border-red-200 bg-red-50 text-red-700",
-  rogue: "border-rose-200 bg-rose-50 text-rose-700",
+  anomalous: "border-rose-200 bg-rose-50 text-rose-700",
+  rogue: "border-rose-300 bg-rose-100 text-rose-800",
   dormant: "border-slate-200 bg-slate-50 text-slate-600",
 };
 
@@ -508,29 +508,34 @@ export default function DashboardPage() {
     }
   }, [maxTime, minTime, selectedTrade, trades]);
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100">
-      <header className="border-b bg-white/70 backdrop-blur">
+    <div className="min-h-screen relative bg-gradient-to-br from-slate-50 via-white to-slate-100 text-slate-800">
+      <header className="bg-white/70 backdrop-blur-xl border-b border-white/40 shadow-lg shadow-black/5 sticky top-0 z-50">
         <div className="max-w-6xl mx-auto flex items-center justify-between px-6 py-4">
-          <Link href="/" className="font-semibold">
+          <Link href="/" className="font-semibold text-lg text-slate-800">
             spectra
           </Link>
-          <Link href="/" className="text-sm text-muted-foreground hover:text-foreground">
-            Sign out
-          </Link>
+          <div className="flex items-center gap-6">
+            <Link href="/pricing" className="text-sm text-slate-600 hover:text-slate-800 transition-colors">
+              Pricing
+            </Link>
+            <Link href="/" className="text-sm text-slate-600 hover:text-slate-800 transition-colors">
+              Sign out
+            </Link>
+          </div>
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-6 py-8 space-y-6">
+      <main className="relative z-10 max-w-6xl mx-auto px-6 py-8 space-y-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h1 className="text-lg font-semibold">Behavior classification cockpit</h1>
-            <p className="text-sm text-muted-foreground">
+            <h1 className="text-lg font-bold text-slate-800">Behavior classification cockpit</h1>
+            <p className="text-sm text-slate-600">
               Rolling metrics compare frequency, size, and price impact to each agent baseline.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-2 rounded-full border border-white/70 bg-white/70 px-3 py-1 text-xs shadow-sm backdrop-blur">
-              <span className="text-muted-foreground">Trades/agent</span>
+            <div className="flex items-center gap-2 rounded-full bg-white/70 backdrop-blur-xl border border-white/40 shadow-lg shadow-black/5 px-3 py-1 text-xs">
+              <span className="text-slate-600">Trades/agent</span>
               <Input
                 type="number"
                 min="1"
@@ -544,17 +549,23 @@ export default function DashboardPage() {
                   }
                   setTradesPerAgent(clamp(Math.floor(value), 1, 12));
                 }}
-                className="h-6 w-14 border-white/60 bg-white/80 text-xs"
+                className="h-6 w-14 border-white/40 bg-white/80 text-xs text-slate-800 focus-visible:ring-blue-500/50 focus-visible:border-blue-500/50"
               />
             </div>
             <Button
               onClick={toggleSimulation}
               variant={isRunning ? "destructive" : "default"}
               size="sm"
+              className={isRunning ? "" : "bg-slate-900 text-white border-0 shadow-md hover:bg-slate-800 transition-all"}
             >
               {isRunning ? "Stop" : "Start"} simulation
             </Button>
-            <Button onClick={injectBadTrade} variant="outline" size="sm">
+            <Button 
+              onClick={injectBadTrade} 
+              variant="outline" 
+              size="sm"
+              className="bg-white/70 backdrop-blur-xl border border-slate-200 text-slate-800 shadow-md hover:bg-white/90 transition-all"
+            >
               Inject bad trade
             </Button>
           </div>
@@ -563,30 +574,30 @@ export default function DashboardPage() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <Card size="sm">
             <CardContent className="pt-4">
-              <p className="text-muted-foreground text-xs">Active agents</p>
-              <p className="text-2xl font-semibold">{activeAgents}</p>
-              <p className="text-[11px] text-muted-foreground">Dormant: {AGENTS.length - activeAgents}</p>
+              <p className="text-slate-600 text-xs mb-2">Active agents</p>
+              <p className="text-2xl font-bold text-slate-800">{activeAgents}</p>
+              <p className="text-[11px] text-slate-500">Dormant: {AGENTS.length - activeAgents}</p>
             </CardContent>
           </Card>
           <Card size="sm">
             <CardContent className="pt-4">
-              <p className="text-muted-foreground text-xs">Avg risk score</p>
-              <p className="text-2xl font-semibold">{formatNumber(avgRisk, 1)}</p>
-              <p className="text-[11px] text-muted-foreground">Rolling 12m window</p>
+              <p className="text-slate-600 text-xs mb-2">Avg risk score</p>
+              <p className="text-2xl font-bold text-slate-800">{formatNumber(avgRisk, 1)}</p>
+              <p className="text-[11px] text-slate-500">Rolling 12m window</p>
             </CardContent>
           </Card>
           <Card size="sm">
             <CardContent className="pt-4">
-              <p className="text-muted-foreground text-xs">Recent anomalies</p>
-              <p className="text-2xl font-semibold text-red-600">{anomalyCount}</p>
-              <p className="text-[11px] text-muted-foreground">Anomalous or rogue points</p>
+              <p className="text-slate-600 text-xs mb-2">Recent anomalies</p>
+              <p className="text-2xl font-bold text-rose-600">{anomalyCount}</p>
+              <p className="text-[11px] text-slate-500">Anomalous or rogue points</p>
             </CardContent>
           </Card>
           <Card size="sm">
             <CardContent className="pt-4">
-              <p className="text-muted-foreground text-xs">Bad trades flagged</p>
-              <p className="text-2xl font-semibold text-amber-600">{badTradeCount}</p>
-              <p className="text-[11px] text-muted-foreground">Objective trade rules</p>
+              <p className="text-slate-600 text-xs mb-2">Bad trades flagged</p>
+              <p className="text-2xl font-bold text-amber-600">{badTradeCount}</p>
+              <p className="text-[11px] text-slate-500">Objective trade rules</p>
             </CardContent>
           </Card>
         </div>
@@ -605,12 +616,11 @@ export default function DashboardPage() {
               </CardAction>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="relative overflow-visible rounded-2xl border border-white/70 bg-white/40 p-4 shadow-[0_20px_60px_-30px_rgba(15,23,42,0.45)] backdrop-blur-xl">
-                <div className="pointer-events-none absolute inset-0 rounded-2xl bg-gradient-to-br from-white/70 via-white/30 to-slate-100/40" />
+              <div className="relative overflow-visible rounded-2xl bg-white/70 backdrop-blur-xl border border-white/40 shadow-lg shadow-black/5 p-4">
                 <div className="relative z-10">
                   <div ref={chartWrapRef} className="relative">
                     {trades.length === 0 ? (
-                      <div className="flex h-64 items-center justify-center text-sm text-muted-foreground">
+                      <div className="flex h-64 items-center justify-center text-sm text-slate-600">
                         No trades yet. Start the simulation or add a manual trade.
                       </div>
                     ) : (
@@ -712,7 +722,7 @@ export default function DashboardPage() {
                     )}
                     {selectedTrade && tooltipPosition && (
                       <div
-                        className="pointer-events-none absolute z-20 rounded-xl border border-white/70 bg-white/80 px-3 py-2 text-xs text-slate-700 shadow-xl backdrop-blur-xl"
+                        className="pointer-events-none absolute z-20 rounded-2xl bg-white/95 backdrop-blur-xl border border-white/40 shadow-xl shadow-black/10 px-3 py-2 text-xs text-slate-700"
                         style={{
                           left: tooltipPosition.left,
                           top: tooltipPosition.top,
@@ -737,7 +747,7 @@ export default function DashboardPage() {
                         <p className="mt-1 text-[11px] text-slate-600">
                           {formatNumber(selectedTrade.amount)} {selectedTrade.token} - {selectedTrade.strategy}
                         </p>
-                        <p className="mt-1 text-[11px] text-slate-500">{selectedTrade.decision}</p>
+                        <p className="mt-1 text-[11px] text-slate-600">{selectedTrade.decision}</p>
                         <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] text-slate-600">
                           <div>
                             Risk <span className="font-semibold text-slate-900">{selectedTrade.riskScore}</span>
@@ -761,17 +771,17 @@ export default function DashboardPage() {
                             </span>
                           </div>
                         </div>
-                        <p className="mt-2 text-[11px] text-slate-500">{selectedTrade.behaviorReason}</p>
+                        <p className="mt-2 text-[11px] text-slate-600">{selectedTrade.behaviorReason}</p>
                         {selectedTrade.isBadTrade && selectedTrade.badReason && (
                           <p className="mt-1 text-[11px] font-semibold text-rose-600">
                             Bad trade: {selectedTrade.badReason}
                           </p>
                         )}
-                        <span className="absolute left-1/2 top-full h-3 w-3 -translate-x-1/2 -translate-y-1/2 rotate-45 border-b border-r border-white/70 bg-white/80" />
+                        <span className="absolute left-1/2 top-full h-3 w-3 -translate-x-1/2 -translate-y-1/2 rotate-45 border-b border-r border-white/40 bg-white/95" />
                       </div>
                     )}
                   </div>
-                  <div className="mt-3 flex flex-wrap gap-3 text-xs text-muted-foreground">
+                  <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-600">
                     {AGENTS.map((agentMeta) => (
                       <div key={agentMeta.id} className="flex items-center gap-2">
                         <span className={`h-2 w-2 rounded-full ${agentMeta.dot}`} />
@@ -783,7 +793,7 @@ export default function DashboardPage() {
                       <span>Bad trade marker</span>
                     </div>
                   </div>
-                  <div className="mt-2 flex items-center justify-between text-[11px] text-muted-foreground">
+                  <div className="mt-2 flex items-center justify-between text-[11px] text-slate-600">
                     <span>{new Date(minTime).toLocaleTimeString()}</span>
                     <span>{new Date(maxTime).toLocaleTimeString()}</span>
                   </div>
@@ -791,62 +801,62 @@ export default function DashboardPage() {
               </div>
 
               <div className="grid md:grid-cols-2 gap-4">
-                <div className="rounded-lg border bg-white/70 p-4 space-y-3">
+                <div className="rounded-2xl bg-white/70 backdrop-blur-xl border border-white/40 shadow-lg shadow-black/5 p-4 space-y-3">
                   <div>
-                    <p className="text-xs text-muted-foreground">Classification signals</p>
-                    <p className="text-sm font-semibold">Over time, not one trade</p>
+                    <p className="text-xs text-slate-600">Classification signals</p>
+                    <p className="text-sm font-bold text-slate-800">Over time, not one trade</p>
                   </div>
-                  <div className="space-y-2 text-xs text-muted-foreground">
+                  <div className="space-y-2 text-xs text-slate-600">
                     <div className="flex items-center justify-between">
                       <span>Frequency vs baseline</span>
-                      <span className="font-medium text-foreground">Rolling 12m</span>
+                      <span className="font-medium text-slate-800">Rolling 12m</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span>Position sizing drift</span>
-                      <span className="font-medium text-foreground">Avg notional</span>
+                      <span className="font-medium text-slate-800">Avg notional</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span>Price impact trend</span>
-                      <span className="font-medium text-foreground">Impact delta</span>
+                      <span className="font-medium text-slate-800">Impact delta</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span>Bad trade rules</span>
-                      <span className="font-medium text-foreground">Objective flags</span>
+                      <span className="font-medium text-slate-800">Objective flags</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span>Classification</span>
-                      <span className="font-medium text-foreground">Conservative to rogue</span>
+                      <span className="font-medium text-slate-800">Conservative to rogue</span>
                     </div>
                   </div>
-                  <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-muted-foreground">
+                  <div className="rounded-xl bg-slate-50/80 backdrop-blur-sm border border-slate-200/50 p-3 text-xs text-slate-600">
                     Spectra grades behavior over rolling windows to avoid punishing a single mistake.
                   </div>
                 </div>
 
-                <div className="rounded-lg border bg-white/70 p-4 space-y-3">
+                <div className="rounded-2xl bg-white/70 backdrop-blur-xl border border-white/40 shadow-lg shadow-black/5 p-4 space-y-3">
                   <div>
-                    <p className="text-xs text-muted-foreground">Adaptive timeline</p>
-                    <p className="text-sm font-semibold">Zooms with trading cadence</p>
+                    <p className="text-xs text-slate-600">Adaptive timeline</p>
+                    <p className="text-sm font-bold text-slate-800">Zooms with trading cadence</p>
                   </div>
-                  <div className="space-y-2 text-xs text-muted-foreground">
+                  <div className="space-y-2 text-xs text-slate-600">
                     <div className="flex items-center justify-between">
                       <span>Visible window</span>
-                      <span className="font-medium text-foreground">{visibleWindowLabel}m</span>
+                      <span className="font-medium text-slate-800">{visibleWindowLabel}m</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span>Behavior window</span>
-                      <span className="font-medium text-foreground">12m</span>
+                      <span className="font-medium text-slate-800">12m</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span>Trades per agent</span>
-                      <span className="font-medium text-foreground">{tradesPerAgent} / tick</span>
+                      <span className="font-medium text-slate-800">{tradesPerAgent} / tick</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span>Tick interval</span>
-                      <span className="font-medium text-foreground">1.8s</span>
+                      <span className="font-medium text-slate-800">1.8s</span>
                     </div>
                   </div>
-                  <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-muted-foreground">
+                  <div className="rounded-xl bg-slate-50/80 backdrop-blur-sm border border-slate-200/50 p-3 text-xs text-slate-600">
                     Click any point to open a tooltip anchored to the selected decision.
                   </div>
                 </div>
@@ -863,18 +873,18 @@ export default function DashboardPage() {
               <CardContent>
                 <form onSubmit={submitTrade} className="space-y-3">
                   <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <Label className="text-xs">Agent</Label>
+                  <div>
+                    <Label className="text-xs text-slate-700">Agent</Label>
                       <Select
                         value={agent}
                         onValueChange={(value) => setAgent(value as AgentId)}
                       >
-                        <SelectTrigger className="w-full mt-1">
+                        <SelectTrigger className="w-full mt-1 bg-white/70 backdrop-blur-xl border border-white/40 text-slate-800 focus-visible:ring-blue-500/50 focus-visible:border-blue-500/50">
                           <SelectValue />
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent className="bg-white/95 backdrop-blur-xl border border-white/40 shadow-xl shadow-black/10 rounded-2xl">
                           {AGENTS.map((agentMeta) => (
-                            <SelectItem key={agentMeta.id} value={agentMeta.id}>
+                            <SelectItem key={agentMeta.id} value={agentMeta.id} className="text-slate-800 hover:bg-slate-50">
                               {agentMeta.name}
                             </SelectItem>
                           ))}
@@ -882,17 +892,17 @@ export default function DashboardPage() {
                       </Select>
                     </div>
                     <div>
-                      <Label className="text-xs">Action</Label>
+                      <Label className="text-xs text-slate-700">Action</Label>
                       <Select
                         value={action}
                         onValueChange={(value) => setAction(value as TradeAction)}
                       >
-                        <SelectTrigger className="w-full mt-1">
+                        <SelectTrigger className="w-full mt-1 bg-white/70 backdrop-blur-xl border border-white/40 text-slate-800 focus-visible:ring-blue-500/50 focus-visible:border-blue-500/50">
                           <SelectValue />
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent className="bg-white/95 backdrop-blur-xl border border-white/40 shadow-xl shadow-black/10 rounded-2xl">
                           {ACTIONS.map((item) => (
-                            <SelectItem key={item} value={item}>
+                            <SelectItem key={item} value={item} className="text-slate-800 hover:bg-slate-50">
                               {item.toUpperCase()}
                             </SelectItem>
                           ))}
@@ -902,14 +912,14 @@ export default function DashboardPage() {
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <Label className="text-xs">Token</Label>
+                      <Label className="text-xs text-slate-700">Token</Label>
                       <Select value={token} onValueChange={setToken}>
-                        <SelectTrigger className="w-full mt-1">
+                        <SelectTrigger className="w-full mt-1 bg-white/70 backdrop-blur-xl border border-white/40 text-slate-800 focus-visible:ring-blue-500/50 focus-visible:border-blue-500/50">
                           <SelectValue />
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent className="bg-white/95 backdrop-blur-xl border border-white/40 shadow-xl shadow-black/10 rounded-2xl">
                           {TOKENS.map((item) => (
-                            <SelectItem key={item} value={item}>
+                            <SelectItem key={item} value={item} className="text-slate-800 hover:bg-slate-50">
                               {item}
                             </SelectItem>
                           ))}
@@ -917,17 +927,17 @@ export default function DashboardPage() {
                       </Select>
                     </div>
                     <div>
-                      <Label className="text-xs">Amount</Label>
+                      <Label className="text-xs text-slate-700">Amount</Label>
                       <Input
                         type="number"
                         placeholder="0"
                         value={amount}
                         onChange={(event) => setAmount(event.target.value)}
-                        className="mt-1"
+                        className="mt-1 bg-white/70 backdrop-blur-xl border border-white/40 text-slate-800 focus-visible:ring-blue-500/50 focus-visible:border-blue-500/50 placeholder:text-slate-400"
                       />
                     </div>
                   </div>
-                  <Button type="submit" className="w-full">
+                  <Button type="submit" className="w-full bg-slate-900 text-white border-0 shadow-md hover:bg-slate-800 transition-all">
                     Submit trade
                   </Button>
                 </form>
@@ -946,7 +956,7 @@ export default function DashboardPage() {
                       <Badge variant="outline" className={behaviorBadgeClasses[label]}>
                         {behaviorLabels[label]}
                       </Badge>
-                      <span className="text-muted-foreground">
+                      <span className="text-slate-600">
                         {label === "conservative" && "Low risk, steady cadence"}
                         {label === "aggressive" && "Higher frequency, larger size"}
                         {label === "anomalous" && "Deviation from baseline"}
@@ -969,10 +979,10 @@ export default function DashboardPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto rounded-2xl bg-white/70 backdrop-blur-xl border border-white/40 shadow-lg shadow-black/5 p-2">
               <table className="w-full text-xs">
                 <thead>
-                  <tr className="text-left text-muted-foreground border-b">
+                  <tr className="text-left text-slate-600 border-b border-slate-200">
                     <th className="py-2 pr-4">Agent</th>
                     <th className="py-2 pr-4">Trades</th>
                     <th className="py-2 pr-4">Avg notional</th>
@@ -985,27 +995,27 @@ export default function DashboardPage() {
                 </thead>
                 <tbody>
                   {agentStats.map((stat) => (
-                    <tr key={stat.id} className="border-b last:border-b-0">
+                    <tr key={stat.id} className="border-b border-slate-100 last:border-b-0 hover:bg-slate-50/50 transition-colors">
                       <td className="py-3 pr-4">
                         <div className="flex items-center gap-2">
                           <span className={`h-2 w-2 rounded-full ${stat.dot}`} />
                           <div>
-                            <p className="font-medium text-foreground">{stat.name}</p>
-                            <p className="text-[11px] text-muted-foreground">{stat.role}</p>
+                            <p className="font-medium text-slate-800">{stat.name}</p>
+                            <p className="text-[11px] text-slate-600">{stat.role}</p>
                           </div>
                         </div>
                       </td>
-                      <td className="py-3 pr-4">{stat.totalTrades}</td>
-                      <td className="py-3 pr-4">{formatNumber(stat.avgAmount, 0)}</td>
-                      <td className="py-3 pr-4">{formatNumber(stat.avgRisk, 1)}</td>
-                      <td className="py-3 pr-4">{formatNumber(stat.avgConfidence * 100, 0)}%</td>
-                      <td className="py-3 pr-4">{stat.badTrades}</td>
+                      <td className="py-3 pr-4 text-slate-700">{stat.totalTrades}</td>
+                      <td className="py-3 pr-4 text-slate-700">{formatNumber(stat.avgAmount, 0)}</td>
+                      <td className="py-3 pr-4 text-slate-700">{formatNumber(stat.avgRisk, 1)}</td>
+                      <td className="py-3 pr-4 text-slate-700">{formatNumber(stat.avgConfidence * 100, 0)}%</td>
+                      <td className="py-3 pr-4 text-slate-700">{stat.badTrades}</td>
                       <td className="py-3 pr-4">
                         <Badge variant="outline" className={behaviorBadgeClasses[stat.behavior]}>
                           {behaviorLabels[stat.behavior]}
                         </Badge>
                       </td>
-                      <td className="py-3">
+                      <td className="py-3 text-slate-700">
                         {stat.lastSeen ? stat.lastSeen.toLocaleTimeString() : "--"}
                       </td>
                     </tr>

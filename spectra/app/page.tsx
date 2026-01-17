@@ -100,7 +100,7 @@ const navItems: CardNavItem[] = [
     textColor: "#e2e8f0",
     links: [
       { label: "Features", href: "#features", ariaLabel: "View features" },
-      { label: "Pricing", href: "#pricing", ariaLabel: "View pricing" },
+      { label: "Pricing", href: "/pricing", ariaLabel: "View pricing" },
       { label: "Demo", href: "#demo", ariaLabel: "View demo" },
     ],
   },
