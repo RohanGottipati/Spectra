@@ -315,7 +315,6 @@ export default function DashboardPage() {
   const tradesPerAgentRef = useRef(tradesPerAgent);
   const chartWrapRef = useRef<HTMLDivElement | null>(null);
   const [chartSize, setChartSize] = useState({ width: 0, height: 0 });
-  const [mounted, setMounted] = useState(false);
 
   const [agent, setAgent] = useState<AgentId>("alpha");
   const [action, setAction] = useState<TradeAction>("buy");
@@ -466,10 +465,6 @@ export default function DashboardPage() {
   useEffect(() => {
     tradesPerAgentRef.current = tradesPerAgent;
   }, [tradesPerAgent]);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   useEffect(() => {
     const element = chartWrapRef.current;
@@ -997,8 +992,12 @@ export default function DashboardPage() {
                     </div>
                   </div>
                   <div className="mt-2 flex items-center justify-between text-[11px] text-muted-foreground">
-                    <span>{mounted ? new Date(minTime).toLocaleTimeString() : "--:--:--"}</span>
-                    <span>{mounted ? new Date(maxTime).toLocaleTimeString() : "--:--:--"}</span>
+                    <span suppressHydrationWarning>
+                      {new Date(minTime).toLocaleTimeString()}
+                    </span>
+                    <span suppressHydrationWarning>
+                      {new Date(maxTime).toLocaleTimeString()}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -1555,8 +1554,8 @@ export default function DashboardPage() {
                           {behaviorLabels[stat.behavior as AgentBehavior]}
                         </Badge>
                       </td>
-                      <td className="py-3">
-                        {mounted && stat.lastSeen ? stat.lastSeen.toLocaleTimeString() : "--"}
+                      <td className="py-3" suppressHydrationWarning>
+                        {stat.lastSeen ? stat.lastSeen.toLocaleTimeString() : "--"}
                       </td>
                     </tr>
                   ))}
