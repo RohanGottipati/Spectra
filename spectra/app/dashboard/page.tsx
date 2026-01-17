@@ -22,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { createClient } from "@/lib/supabase/client";
 
 type AgentId = "alpha" | "beta" | "gamma";
 type TradeAction = "buy" | "sell" | "swap";
@@ -72,6 +73,37 @@ interface Baseline {
   avgImpact: number;
   freqPerMin: number;
 }
+
+// Database types
+interface DbTrade {
+  id: string;
+  agent_id: string;
+  action: string;
+  token: string;
+  amount: number;
+  price_usd: number | null;
+  notional_usd: number | null;
+  confidence: number | null;
+  price_impact: number | null;
+  reasoning: string | null;
+  risk_score: number | null;
+  behavior: string | null;
+  is_bad_trade: boolean;
+  bad_trade_reasons: string[] | null;
+  market_data: Record<string, number> | null;
+  created_at: string;
+}
+
+interface DbAgent {
+  id: string;
+  name: string;
+  wallet_address: string;
+  personality: string;
+  color: string;
+  config: Record<string, unknown>;
+}
+
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 
 const AGENTS: {
   id: AgentId;
@@ -283,6 +315,42 @@ function enrichTrade(trade: TradeInput, history: Trade[]) {
   return { ...trade, ...badFlag, ...behavior };
 }
 
+// Convert database trade to UI trade format
+function dbTradeToTrade(dbTrade: DbTrade, history: Trade[]): Trade {
+  const tradeInput: TradeInput = {
+    id: dbTrade.id,
+    agent: dbTrade.agent_id as AgentId,
+    action: dbTrade.action as TradeAction,
+    token: dbTrade.token,
+    amount: dbTrade.notional_usd || dbTrade.amount || 0,
+    timestamp: new Date(dbTrade.created_at),
+    decision: dbTrade.reasoning || `${dbTrade.action} ${dbTrade.token}`,
+    strategy: "ai-driven",
+    confidence: (dbTrade.confidence || 75) / 100,
+    priceImpact: dbTrade.price_impact || 1,
+  };
+
+  // If the database already has behavior classification, use it
+  if (dbTrade.risk_score !== null && dbTrade.behavior) {
+    const windowStart = tradeInput.timestamp.getTime() - WINDOW_MS;
+    const recent = history.filter(
+      (item) => item.agent === tradeInput.agent && item.timestamp.getTime() >= windowStart
+    );
+    return {
+      ...tradeInput,
+      riskScore: dbTrade.risk_score,
+      behavior: dbTrade.behavior as TradeBehavior,
+      behaviorReason: dbTrade.bad_trade_reasons?.join("; ") || "AI-classified",
+      isBadTrade: dbTrade.is_bad_trade,
+      badReason: dbTrade.bad_trade_reasons?.[0],
+      window: buildWindow([...recent, tradeInput]),
+    };
+  }
+
+  // Otherwise, compute behavior locally
+  return enrichTrade(tradeInput, history);
+}
+
 function buildTradeInput(overrides: Partial<TradeInput> = {}): TradeInput {
   const action = overrides.action ?? pickOne(ACTIONS);
   const token = overrides.token ?? pickOne(TOKENS);
@@ -315,6 +383,12 @@ export default function DashboardPage() {
   const tradesPerAgentRef = useRef(tradesPerAgent);
   const chartWrapRef = useRef<HTMLDivElement | null>(null);
   const [chartSize, setChartSize] = useState({ width: 0, height: 0 });
+
+  // Supabase state
+  const [isTriggering, setIsTriggering] = useState(false);
+  const [useRealData, setUseRealData] = useState(true);
+  const [lastTriggerResult, setLastTriggerResult] = useState<string | null>(null);
+  const supabaseRef = useRef(createClient());
 
   const [agent, setAgent] = useState<AgentId>("alpha");
   const [action, setAction] = useState<TradeAction>("buy");
@@ -496,6 +570,106 @@ export default function DashboardPage() {
       setSelectedTradeId(trades[0].id);
     }
   }, [trades, selectedTradeId]);
+
+  // Fetch initial trades and subscribe to realtime updates
+  useEffect(() => {
+    if (!useRealData) return;
+
+    const supabase = supabaseRef.current;
+
+    // Fetch initial trades
+    const fetchTrades = async () => {
+      const { data, error } = await supabase
+        .from("trades")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(MAX_TRADES);
+
+      if (error) {
+        console.error("Error fetching trades:", error);
+        return;
+      }
+
+      if (data) {
+        // Convert database trades to UI trades
+        const uiTrades: Trade[] = [];
+        // Process in reverse order (oldest first) to build history correctly
+        const sortedData = [...data].reverse();
+        for (const dbTrade of sortedData) {
+          const trade = dbTradeToTrade(dbTrade, uiTrades);
+          uiTrades.push(trade);
+        }
+        // Reverse back to show newest first
+        setTrades(uiTrades.reverse());
+      }
+    };
+
+    fetchTrades();
+
+    // Subscribe to realtime inserts
+    const channel = supabase
+      .channel("trades-realtime")
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "trades",
+        },
+        (payload) => {
+          const dbTrade = payload.new as DbTrade;
+          setTrades((prev) => {
+            const trade = dbTradeToTrade(dbTrade, prev);
+            return [trade, ...prev].slice(0, MAX_TRADES);
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [useRealData]);
+
+  // Function to trigger all agents
+  const triggerAgents = async () => {
+    setIsTriggering(true);
+    setLastTriggerResult(null);
+    try {
+      const response = await fetch(
+        `${SUPABASE_URL}/functions/v1/trigger-agents`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+      const result = await response.json();
+      const successCount = result.triggered?.filter(
+        (r: { status: string }) => r.status === "success"
+      ).length || 0;
+      setLastTriggerResult(`Triggered ${successCount}/3 agents`);
+    } catch (error) {
+      console.error("Error triggering agents:", error);
+      setLastTriggerResult("Error triggering agents");
+    } finally {
+      setIsTriggering(false);
+    }
+  };
+
+  // Auto-trigger agents when simulation is running
+  useEffect(() => {
+    if (!isRunning || !useRealData) return;
+
+    // Trigger immediately
+    triggerAgents();
+
+    // Then trigger every 30 seconds
+    const id = setInterval(() => {
+      triggerAgents();
+    }, 30000);
+
+    return () => clearInterval(id);
+  }, [isRunning, useRealData]);
 
   const now = Date.now();
 
@@ -680,34 +854,77 @@ export default function DashboardPage() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            {/* Data source toggle */}
             <div className="flex items-center gap-2 rounded-full border border-white/70 bg-white/70 px-3 py-1 text-xs shadow-sm backdrop-blur">
-              <span className="text-muted-foreground">Trades/agent</span>
-              <Input
-                type="number"
-                min="1"
-                max="12"
-                value={tradesPerAgent}
-                onChange={(event) => {
-                  const value = Number(event.target.value);
-                  if (Number.isNaN(value)) {
-                    setTradesPerAgent(1);
-                    return;
-                  }
-                  setTradesPerAgent(clamp(Math.floor(value), 1, 12));
-                }}
-                className="h-6 w-14 border-white/60 bg-white/80 text-xs"
-              />
+              <span className="text-muted-foreground">Data</span>
+              <button
+                onClick={() => setUseRealData(!useRealData)}
+                className={`px-2 py-0.5 rounded text-xs font-medium transition-colors ${
+                  useRealData
+                    ? "bg-emerald-500 text-white"
+                    : "bg-slate-200 text-slate-600"
+                }`}
+              >
+                {useRealData ? "Live" : "Mock"}
+              </button>
             </div>
-            <Button
-              onClick={toggleSimulation}
-              variant={isRunning ? "destructive" : "default"}
-              size="sm"
-            >
-              {isRunning ? "Stop" : "Start"} simulation
-            </Button>
-            <Button onClick={injectBadTrade} variant="outline" size="sm">
-              Inject bad trade
-            </Button>
+            {!useRealData && (
+              <div className="flex items-center gap-2 rounded-full border border-white/70 bg-white/70 px-3 py-1 text-xs shadow-sm backdrop-blur">
+                <span className="text-muted-foreground">Trades/agent</span>
+                <Input
+                  type="number"
+                  min="1"
+                  max="12"
+                  value={tradesPerAgent}
+                  onChange={(event) => {
+                    const value = Number(event.target.value);
+                    if (Number.isNaN(value)) {
+                      setTradesPerAgent(1);
+                      return;
+                    }
+                    setTradesPerAgent(clamp(Math.floor(value), 1, 12));
+                  }}
+                  className="h-6 w-14 border-white/60 bg-white/80 text-xs"
+                />
+              </div>
+            )}
+            {useRealData ? (
+              <>
+                <Button
+                  onClick={() => setIsRunning(!isRunning)}
+                  variant={isRunning ? "destructive" : "default"}
+                  size="sm"
+                >
+                  {isRunning ? "Stop" : "Start"} agents
+                </Button>
+                <Button
+                  onClick={triggerAgents}
+                  variant="outline"
+                  size="sm"
+                  disabled={isTriggering}
+                >
+                  {isTriggering ? "Triggering..." : "Trigger once"}
+                </Button>
+                {lastTriggerResult && (
+                  <span className="text-xs text-muted-foreground">
+                    {lastTriggerResult}
+                  </span>
+                )}
+              </>
+            ) : (
+              <>
+                <Button
+                  onClick={toggleSimulation}
+                  variant={isRunning ? "destructive" : "default"}
+                  size="sm"
+                >
+                  {isRunning ? "Stop" : "Start"} simulation
+                </Button>
+                <Button onClick={injectBadTrade} variant="outline" size="sm">
+                  Inject bad trade
+                </Button>
+              </>
+            )}
           </div>
         </div>
 
