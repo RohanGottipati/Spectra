@@ -1,0 +1,242 @@
+---
+title: Spectra
+description: Flight Simulator and Traffic Control for the Agent Economy
+---
+
+import { Card, Cards } from "fumadocs-ui/components/card";
+import { Callout } from "fumadocs-ui/components/callout";
+
+# Spectra: Flight Simulator & Traffic Control for AI Agents
+
+Spectra is a comprehensive platform designed to safely deploy and monitor AI agents in the agent economy. We provide two critical phases of protection: **pre-flight testing** and **on-chain circuit breaker protection**.
+
+## The Vision
+
+As autonomous AI agents become increasingly capable and prevalent, there's an urgent need for safety mechanisms to prevent catastrophic failures. Spectra bridges the gap between experimental AI development and safe production deployment.
+
+**Two-Phase Safety Approach:**
+
+- **Phase 1 (Sandbox)**: Your agents train and test in a risk-free simulation environment
+- **Phase 2 (Guardian)**: Once deployed, on-chain circuit breakers protect against rogue behavior in real-time
+
+## Core Problems We Solve
+
+<Callout type="warn" title="⚠️ Problem 1: Agent Behavior Validation">
+  AI agents can exhibit unexpected behaviors due to edge cases, adversarial
+  inputs, or model drift. Without proper testing, these issues only surface in
+  production.
+</Callout>
+
+**Our Solution:** Comprehensive sandbox environment with backtesting, stress testing, and behavior classification to validate agent safety before deployment.
+
+---
+
+<Callout type="warn" title="⚠️ Problem 2: Real-Time Rogue Detection">
+  Once deployed, agents execute autonomously. If something goes wrong, you need
+  immediate visibility and automatic protection.
+</Callout>
+
+**Our Solution:** Real-time behavior monitoring with instant anomaly detection and automatic circuit breakers that halt agents on critical events.
+
+---
+
+<Callout type="warn" title="⚠️ Problem 3: Risk Management">
+  Autonomous agents can quickly accumulate losses or take excessive risks if
+  unchecked.
+</Callout>
+
+**Our Solution:** Configurable safety constraints including position limits, daily loss caps, frequency controls, and strategy restrictions.
+
+## How It Works
+
+### Phase 1: Pre-Flight Testing (Sandbox)
+
+Before deploying any agent to production, run it through our sandbox environment:
+
+```python
+# Deploy to sandbox
+agent.deploy(environment='sandbox')
+
+# Run comprehensive backtests
+results = agent.run_backtest(
+    start_date='2024-01-01',
+    end_date='2026-01-17',
+    initial_capital=100000
+)
+
+# Validate performance metrics
+assert results.sharpe_ratio > 1.0
+assert results.max_drawdown < 0.25
+assert results.win_rate > 0.55
+```
+
+**This phase includes:**
+
+- Historical backtesting across multiple market conditions
+- Real-time trade simulation with live market data
+- Behavior classification (conservative, moderate, aggressive, anomalous, rogue)
+- Risk metric analysis (Sharpe ratio, drawdown, win rate)
+- Edge case stress testing
+
+---
+
+### Phase 2: Production with Circuit Breaker (Guardian)
+
+Once validated in sandbox, deploy to production with automatic safety guards:
+
+```python
+# Deploy to production with circuit breaker
+deployment = agent.deploy(
+    environment='production',
+    circuit_breaker=True,
+    alert_email='your-email@example.com'
+)
+
+# Register event handlers
+agent.on_rogue_detected(callback=handle_rogue)
+agent.on_anomaly_detected(callback=handle_anomaly)
+agent.on_circuit_breaker_triggered(callback=immediate_escalation)
+```
+
+**This phase includes:**
+
+- Real-time behavior monitoring
+- Instant anomaly detection
+- Automatic circuit breaker on critical events
+- Webhook notifications for important events
+- Dashboard visualization of agent activity
+
+## Key Features
+
+<Cards>
+  <Card
+    title="Sandbox Environment"
+    description="Risk-free testing with historical backtesting and stress testing capabilities."
+  />
+  <Card
+    title="Circuit Breaker"
+    description="Automatic on-chain protection that halts agents on rogue or anomalous behavior."
+  />
+  <Card
+    title="Real-Time Monitoring"
+    description="Dashboard with live agent activity, metrics, and instant anomaly alerts."
+  />
+  <Card
+    title="Behavior Classification"
+    description="Automatic classification of agent actions as conservative, moderate, aggressive, or anomalous."
+  />
+  <Card
+    title="Flexible Configuration"
+    description="Fine-grained control over agent behavior with position limits, loss caps, and strategy restrictions."
+  />
+  <Card
+    title="Event Webhooks"
+    description="Real-time notifications for critical events like rogue detection or circuit breaker triggers."
+  />
+</Cards>
+
+## Use Cases
+
+<Cards>
+  <Card
+    title="Algorithmic Trading"
+    description="Deploy trading bots with automatic position size limits and daily loss caps. Validate strategies before risking real capital."
+  />
+  <Card
+    title="DeFi Automation"
+    description="Automate complex DeFi operations with slippage protection and anomaly detection. Prevent cascading liquidation failures."
+  />
+  <Card
+    title="Autonomous Agents"
+    description="Run AI agents that take actions on your behalf. Spectra ensures they stay within boundaries and alerts you on behavior changes."
+  />
+  <Card
+    title="Portfolio Rebalancing"
+    description="Automate rebalancing with behavior constraints. Prevent excessive trading or deviation from intended strategies."
+  />
+</Cards>
+
+## Safety Guarantees
+
+Spectra provides **multiple layers of protection**:
+
+| Layer              | Protection             | Mechanism                          |
+| ------------------ | ---------------------- | ---------------------------------- |
+| **Pre-Deployment** | Behavior validation    | Sandbox testing & backtesting      |
+| **Real-Time**      | Behavior monitoring    | Continuous classification          |
+| **Emergency**      | Automatic halt         | Circuit breaker on critical events |
+| **Alerting**       | Immediate notification | Webhooks & email alerts            |
+
+<Callout type="warn">
+  **Important**: While Spectra provides comprehensive safety mechanisms, it is
+  not a guarantee against all possible failures. Always maintain manual override
+  capabilities and conduct thorough testing before production deployment.
+</Callout>
+
+## The Agent Economy
+
+<Callout type="info" title="Why This Matters">
+  The agent economy is emerging as autonomous AI systems become more capable.
+  One agent's failure can cascade to others, making safety critical
+  infrastructure.
+</Callout>
+
+**Key Drivers:**
+
+- **Agent Proliferation**: Thousands of agents managing trades, operations, and autonomous tasks
+- **Systemic Risk**: One agent's failure can cascade to others or disrupt markets
+- **Safety Critical**: Agents operate with significant capital and real-world consequences
+- **Transparency Gap**: Humans often don't understand agent decision-making
+
+Spectra is building the infrastructure for safe agent deployment in this new economy. We're the bridge between experimental AI and production-ready autonomous systems.
+
+## Getting Started
+
+Ready to deploy your agent safely? Choose your path:
+
+<Cards>
+  <Card
+    title="Quick Start"
+    href="/docs/getting-started"
+    description="Deploy your first agent in 5 minutes with our quick start guide."
+  />
+  <Card
+    title="API Reference"
+    href="/docs/api-reference"
+    description="Complete API documentation for the Spectra SDK."
+  />
+  <Card
+    title="Best Practices"
+    href="/docs/best-practices"
+    description="Learn best practices for safe agent deployment and monitoring."
+  />
+</Cards>
+
+## Why Spectra?
+
+<Cards>
+  <Card
+    title="Purpose-Built"
+    description="Designed specifically for autonomous agent safety, not a generic tool."
+  />
+  <Card
+    title="Comprehensive"
+    description="From sandbox testing to production monitoring, we handle it all."
+  />
+  <Card
+    title="Developer-Friendly"
+    description="Simple APIs in Python, TypeScript, and JavaScript."
+  />
+  <Card
+    title="Production-Ready"
+    description="Used by teams managing millions in autonomous trading."
+  />
+  <Card
+    title="Open Source"
+    description="Transparent, auditable safety mechanisms."
+  />
+  <Card
+    title="Always Improving"
+    description="Regular updates and new safety features based on agent economy needs."
+  />
+</Cards>
