@@ -24,6 +24,10 @@ export default function RootLayout({
           href="https://fonts.cdnfonts.com/css/satoshi"
           rel="stylesheet"
         />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700&display=swap"
+          rel="stylesheet"
+        />
       </head>
       <body className={`${geistMono.variable} antialiased`} style={{ fontFamily: "'Satoshi', system-ui, sans-serif" }}>
         {children}

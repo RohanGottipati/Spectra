@@ -1,15 +1,17 @@
 "use client";
 
+import Link from "next/link";
 import Iridescence from "@/components/Iridescence";
 import ColorBends from "@/components/ColorBends";
 import Noise from "@/components/Noise";
 import Aurora from "@/components/Aurora";
+import Hyperspeed from "@/components/Hyperspeed";
+import { hyperspeedPresets } from "@/components/HyperSpeedPresets";
 import CardSwap, { Card } from "@/components/CardSwap";
 import BlurText from "@/components/BlurText";
 import CountUp from "@/components/CountUp";
 import Magnet from "@/components/Magnet";
 import ShinyText from "@/components/ShinyText";
-import GradientText from "@/components/GradientText";
 import { AnimatedList } from "@/components/ui/animated-list";
 import { Marquee } from "@/components/ui/marquee";
 import { BorderBeam } from "@/components/ui/border-beam";
@@ -38,7 +40,7 @@ const alerts: { icon: IconSvgElement; title: string; description: string; time: 
   {
     icon: Alert02Icon,
     title: "Anomaly Detected",
-    description: "Agent-7 exceeded spending limit by 340%",
+    description: "Trading bot exceeded SOL limit by 340%",
     time: "Just now",
     color: "bg-red-100",
     iconColor: "text-red-600",
@@ -46,7 +48,7 @@ const alerts: { icon: IconSvgElement; title: string; description: string; time: 
   {
     icon: AlertDiamondIcon,
     title: "Unusual Pattern",
-    description: "3 agents making similar transactions",
+    description: "3 bots front-running the same pair",
     time: "2m ago",
     color: "bg-amber-100",
     iconColor: "text-amber-600",
@@ -54,7 +56,7 @@ const alerts: { icon: IconSvgElement; title: string; description: string; time: 
   {
     icon: Shield01Icon,
     title: "Auto-Paused",
-    description: "Agent-12 halted after suspicious activity",
+    description: "Arb bot halted after failed slippage",
     time: "5m ago",
     color: "bg-emerald-100",
     iconColor: "text-emerald-600",
@@ -62,7 +64,7 @@ const alerts: { icon: IconSvgElement; title: string; description: string; time: 
   {
     icon: ChartHistogramIcon,
     title: "Threshold Breach",
-    description: "Daily limit reached for wallet 0x8f...3a",
+    description: "Daily limit hit for 8fK3...vN2a",
     time: "8m ago",
     color: "bg-violet-100",
     iconColor: "text-violet-600",
@@ -70,7 +72,7 @@ const alerts: { icon: IconSvgElement; title: string; description: string; time: 
   {
     icon: Notification01Icon,
     title: "New Agent Online",
-    description: "Agent-15 connected and monitoring",
+    description: "Sniper bot connected to Jupiter",
     time: "12m ago",
     color: "bg-cyan-100",
     iconColor: "text-cyan-600",
@@ -78,12 +80,14 @@ const alerts: { icon: IconSvgElement; title: string; description: string; time: 
 ];
 
 // Integration/feature items for Marquee
-const integrations: { name: string; icon: IconSvgElement }[] = [
+const integrations: { name: string; icon?: IconSvgElement; emoji?: string; fontFamily?: string }[] = [
+  { name: "Solana", emoji: "◎", fontFamily: "'Orbitron', sans-serif" },
+  { name: "SPL Tokens", emoji: "🪙" },
+  { name: "DeFi Protocols", emoji: "📊" },
   { name: "Slack", icon: SlackIcon },
   { name: "Discord", icon: DiscordIcon },
   { name: "Telegram", icon: TelegramIcon },
   { name: "Webhooks", icon: Link01Icon },
-  { name: "API", icon: ApiIcon },
   { name: "ML Detection", icon: AiBrain01Icon },
   { name: "Real-time", icon: Time01Icon },
 ];
@@ -133,13 +137,15 @@ export default function Page() {
         menuColor="#fff"
         buttonBgColor="#a5f3fc"
         buttonTextColor="#0f172a"
+        buttonText="Login"
+        buttonHref="/login"
       />
 
       {/* Hero Section */}
       <section className="relative min-h-screen w-full overflow-hidden">
         <div className="absolute inset-0 w-full h-full">
           <Iridescence
-            color={[0.2, 0.9, 0.95]}
+            color={[0.18, 0.78, 0.82]}
             speed={0.12}
             amplitude={0.05}
             mouseReact={true}
@@ -151,26 +157,17 @@ export default function Page() {
             {/* Left - Text Content */}
             <div>
               <h1 className="text-[2.75rem] md:text-[3.5rem] lg:text-[4rem] tracking-[-0.02em] mb-6 text-white leading-[1.1] font-[600]">
-                Agent monitoring,{" "}
+                AI agent oversight{" "}
                 <br className="hidden md:block" />
-                made easy with{" "}
+                for <span style={{ fontFamily: "'Orbitron', sans-serif" }}>Solana</span> with{" "}
 <span className="relative inline-block">
-                  <GradientText
-                    colors={[
-                      "#a5f3fc", // cyan
-                      "#c4b5fd", // light purple
-                      "#fbcfe8", // light pink
-                      "#ffffff", // white
-                      "#bfdbfe", // light blue
-                      "#ddd6fe", // lavender
-                      "#fecdd3", // rose
-                      "#ffffff", // white
-                      "#c4b5fd", // light purple
-                    ]}
-                    animationSpeed={8}
-                    yoyo={false}
-                    outline
-                  >Spectra</GradientText>
+                  <ShinyText
+                    text="spectra"
+                    speed={3}
+                    color="#ffffff"
+                    shineColor="#a5f3fc"
+                    className="drop-shadow-[0_1px_2px_rgba(0,0,0,0.3)]"
+                  />
                   {/* Underline */}
                   <span
                     className="absolute left-0 right-0 h-[2px] pointer-events-none rounded-full"
@@ -182,15 +179,15 @@ export default function Page() {
                 </span>
               </h1>
               <p className="text-xl text-white mb-10 max-w-[420px] leading-relaxed font-[600] drop-shadow-[0_2px_10px_rgba(0,0,0,0.3)]">
-                Know when your agents go rogue — before it's too late.
+                Real-time monitoring for autonomous trading agents. Know when they go rogue — before your treasury is drained.
               </p>
               <Magnet padding={50} magnetStrength={3}>
-                <button className="inline-flex items-center gap-2 px-7 py-3.5 bg-cyan-200 text-slate-800 rounded-full text-base font-[600] hover:bg-cyan-100 transition-colors">
+                <Link href="/login" className="inline-flex items-center gap-2 px-7 py-3.5 bg-cyan-200 text-slate-800 rounded-full text-base font-[600] hover:bg-cyan-100 transition-colors">
                   Get Started
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
                   </svg>
-                </button>
+                </Link>
               </Magnet>
             </div>
 
@@ -209,6 +206,7 @@ export default function Page() {
                       muted
                       playsInline
                       poster=""
+                      suppressHydrationWarning
                     >
                       {/* Add video source here: <source src="/your-video.mp4" type="video/mp4" /> */}
                     </video>
@@ -255,15 +253,15 @@ export default function Page() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-12 mb-16">
             <div className="text-center">
               <p className="text-5xl md:text-6xl font-medium text-slate-800 mb-2">
-                <CountUp to={100} duration={2} separator="," />M+
+                $<CountUp to={2} duration={2} separator="," />B+
               </p>
-              <p className="text-slate-500">Agent payments processed</p>
+              <p className="text-slate-500">Daily agent trading volume</p>
             </div>
             <div className="text-center">
               <p className="text-5xl md:text-6xl font-medium text-slate-800 mb-2">
-                $<CountUp to={380} duration={2.5} separator="," />K
+                <CountUp to={40} duration={2.5} separator="," />%
               </p>
-              <p className="text-slate-500">Daily autonomous transactions</p>
+              <p className="text-slate-500">Of DeFi trades are automated</p>
             </div>
             <div className="text-center">
               <p className="text-5xl md:text-6xl font-medium text-slate-800 mb-2">
@@ -274,7 +272,7 @@ export default function Page() {
           </div>
 
           <BlurText
-            text="AI agents are spending real money autonomously. One rogue agent = catastrophic loss."
+            text="AI agents are trading billions autonomously on Solana. One rogue agent can drain a treasury in minutes."
             delay={50}
             animateBy="words"
             direction="bottom"
@@ -299,7 +297,7 @@ export default function Page() {
             <div>
               <p className="text-sm uppercase tracking-widest text-cyan-600 mb-4 font-medium">
                 <DecryptedText
-                  text="What we solve"
+                  text="Built for trading firms"
                   animateOn="view"
                   speed={40}
                   sequential={true}
@@ -307,10 +305,10 @@ export default function Page() {
                 />
               </p>
               <h2 className="text-3xl md:text-5xl font-medium text-slate-800 mb-6 leading-tight">
-                Spectra solves your biggest agent oversight challenges
+                Full visibility into your trading bot fleet
               </h2>
               <p className="text-lg text-slate-500">
-                From wallet monitoring to anomaly detection, we automate the entire oversight workflow so you can focus on building great agents.
+                Monitor arb bots, snipers, and liquidators across Solana. Set guardrails, detect anomalies, and kill rogue agents before they drain your treasury.
               </p>
             </div>
 
@@ -327,7 +325,7 @@ export default function Page() {
               >
                 <Card className="flex flex-col p-8 bg-white rounded-2xl shadow-xl border border-slate-100">
                   <span className="text-sm uppercase tracking-widest text-indigo-600 font-semibold mb-3">Monitor</span>
-                  <p className="text-slate-600 text-base mb-4">Real-time visibility into every transaction your agents make across all connected wallets.</p>
+                  <p className="text-slate-600 text-base mb-4">Track every trade, swap, and transaction your bots make on Solana DEXs like Jupiter, Raydium, and Orca.</p>
                   <div className="rounded-xl overflow-hidden bg-gradient-to-br from-indigo-100 to-blue-50 aspect-video flex items-center justify-center">
                     <span className="text-sm text-slate-400">Image</span>
                   </div>
@@ -335,7 +333,7 @@ export default function Page() {
 
                 <Card className="flex flex-col p-8 bg-white rounded-2xl shadow-xl border border-slate-100">
                   <span className="text-sm uppercase tracking-widest text-violet-600 font-semibold mb-3">Detect</span>
-                  <p className="text-slate-600 text-base mb-4">ML-powered anomaly detection catches rogue behavior in seconds, not hours.</p>
+                  <p className="text-slate-600 text-base mb-4">ML-powered anomaly detection spots unusual PnL, failed trades, and rogue spending patterns instantly.</p>
                   <div className="rounded-xl overflow-hidden bg-gradient-to-br from-violet-100 to-purple-50 aspect-video flex items-center justify-center">
                     <span className="text-sm text-slate-400">Image</span>
                   </div>
@@ -343,15 +341,15 @@ export default function Page() {
 
                 <Card className="flex flex-col p-8 bg-white rounded-2xl shadow-xl border border-slate-100">
                   <span className="text-sm uppercase tracking-widest text-cyan-600 font-semibold mb-3">Alert</span>
-                  <p className="text-slate-600 text-base mb-4">Instant notifications via Slack, Discord, Telegram, or SMS when thresholds are breached.</p>
+                  <p className="text-slate-600 text-base mb-4">Get Slack, Discord, or Telegram alerts when bots breach limits or behave unexpectedly.</p>
                   <div className="rounded-xl overflow-hidden bg-gradient-to-br from-cyan-100 to-sky-50 aspect-video flex items-center justify-center">
                     <span className="text-sm text-slate-400">Image</span>
                   </div>
                 </Card>
 
                 <Card className="flex flex-col p-8 bg-white rounded-2xl shadow-xl border border-slate-100">
-                  <span className="text-sm uppercase tracking-widest text-emerald-600 font-semibold mb-3">Respond</span>
-                  <p className="text-slate-600 text-base mb-4">One-click kill switch to pause rogue agents instantly before damage spreads.</p>
+                  <span className="text-sm uppercase tracking-widest text-emerald-600 font-semibold mb-3">Kill Switch</span>
+                  <p className="text-slate-600 text-base mb-4">One-click emergency stop for any bot. Automatically pause agents when anomalies are detected.</p>
                   <div className="rounded-xl overflow-hidden bg-gradient-to-br from-emerald-100 to-teal-50 aspect-video flex items-center justify-center">
                     <span className="text-sm text-slate-400">Image</span>
                   </div>
@@ -366,12 +364,7 @@ export default function Page() {
       {/* Integrations Marquee */}
       <section className="relative py-10 bg-slate-900 overflow-hidden">
         <div className="absolute inset-0">
-          <Aurora
-            colorStops={["#1e293b", "#6366f1", "#a5b4fc"]}
-            amplitude={1.0}
-            blend={0.5}
-            speed={0.4}
-          />
+          <Hyperspeed effectOptions={hyperspeedPresets.one} />
         </div>
         <div className="relative z-10">
           <div className="max-w-7xl mx-auto px-6 md:px-12 mb-6">
@@ -385,8 +378,12 @@ export default function Page() {
                 key={idx}
                 className="flex items-center gap-3 px-6 py-3 mx-2 rounded-full bg-white/5 border border-white/10 hover:bg-white/10 transition-colors backdrop-blur-sm"
               >
-                <HugeiconsIcon icon={item.icon} className="w-5 h-5 text-cyan-400" />
-                <span className="text-white/70 font-medium">{item.name}</span>
+                {item.icon ? (
+                  <HugeiconsIcon icon={item.icon} className="w-5 h-5 text-cyan-400" />
+                ) : (
+                  <span className="text-lg">{item.emoji}</span>
+                )}
+                <span className="text-white/70 font-medium" style={item.fontFamily ? { fontFamily: item.fontFamily } : undefined}>{item.name}</span>
               </div>
             ))}
           </Marquee>
@@ -396,8 +393,12 @@ export default function Page() {
                 key={idx}
                 className="flex items-center gap-3 px-6 py-3 mx-2 rounded-full bg-white/5 border border-white/10 hover:bg-white/10 transition-colors backdrop-blur-sm"
               >
-                <HugeiconsIcon icon={item.icon} className="w-5 h-5 text-cyan-400" />
-                <span className="text-white/70 font-medium">{item.name}</span>
+                {item.icon ? (
+                  <HugeiconsIcon icon={item.icon} className="w-5 h-5 text-cyan-400" />
+                ) : (
+                  <span className="text-lg">{item.emoji}</span>
+                )}
+                <span className="text-white/70 font-medium" style={item.fontFamily ? { fontFamily: item.fontFamily } : undefined}>{item.name}</span>
               </div>
             ))}
           </Marquee>
@@ -419,30 +420,30 @@ export default function Page() {
             <div>
               <p className="text-sm uppercase tracking-widest text-cyan-600 mb-4 font-medium">
                 <DecryptedText
-                  text="Real-time monitoring"
+                  text="Live dashboard"
                   animateOn="view"
                   speed={30}
                   sequential={true}
                 />
               </p>
               <h2 className="text-3xl md:text-4xl font-medium text-slate-800 mb-6 leading-tight">
-                See threats the moment they happen
+                Catch rogue trades before they hurt
               </h2>
               <p className="text-lg text-slate-500 mb-8">
-                Our ML-powered detection system monitors every transaction in real-time, alerting you instantly when something looks off.
+                Monitor your entire bot fleet from one dashboard. See PnL, trade history, and anomalies across all your Solana wallets in real-time.
               </p>
               <div className="flex flex-wrap gap-4">
                 <div className="flex items-center gap-2 text-slate-600">
                   <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                  <span className="text-sm">Sub-second detection</span>
+                  <span className="text-sm">Sub-second alerts</span>
                 </div>
                 <div className="flex items-center gap-2 text-slate-600">
                   <span className="w-2 h-2 rounded-full bg-cyan-500"></span>
-                  <span className="text-sm">99.9% accuracy</span>
+                  <span className="text-sm">Multi-wallet support</span>
                 </div>
                 <div className="flex items-center gap-2 text-slate-600">
                   <span className="w-2 h-2 rounded-full bg-violet-500"></span>
-                  <span className="text-sm">Auto-pause capability</span>
+                  <span className="text-sm">Auto kill-switch</span>
                 </div>
               </div>
             </div>
@@ -454,11 +455,9 @@ export default function Page() {
                 {alerts.map((alert, idx) => (
                   <div
                     key={idx}
-                    className="flex items-start gap-4 p-4 rounded-xl bg-white border border-slate-100 shadow-sm"
+                    className="flex items-center gap-4 p-4 rounded-xl bg-white border border-slate-100 shadow-sm"
                   >
-                    <div className={`w-10 h-10 rounded-full ${alert.color} flex items-center justify-center flex-shrink-0`}>
-                      <HugeiconsIcon icon={alert.icon} className={`w-5 h-5 ${alert.iconColor}`} />
-                    </div>
+                    <HugeiconsIcon icon={alert.icon} className={`w-6 h-6 ${alert.iconColor} flex-shrink-0`} />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2">
                         <p className="text-slate-800 font-medium truncate">{alert.title}</p>
@@ -510,9 +509,13 @@ export default function Page() {
 
       {/* Footer */}
       <footer className="py-8 bg-slate-900 border-t border-white/10">
-        <div className="max-w-7xl mx-auto px-6 md:px-12 flex justify-between items-center">
+        <div className="max-w-7xl mx-auto px-6 md:px-12 flex flex-col md:flex-row justify-between items-center gap-4">
           <p className="text-sm text-white/40">spectra</p>
-          <p className="text-sm text-white/40">Built for Solana</p>
+          <p className="text-sm text-white/40">Built for UOttaHack 8 × <span style={{ fontFamily: "'Orbitron', sans-serif" }}>Solana</span></p>
+          <div className="flex items-center gap-2 text-white/40">
+            <span className="text-lg">◎</span>
+            <span className="text-sm">Powered by <span style={{ fontFamily: "'Orbitron', sans-serif" }}>Solana</span></span>
+          </div>
         </div>
       </footer>
     </main>

@@ -28,6 +28,8 @@ export interface CardNavProps {
   menuColor?: string;
   buttonBgColor?: string;
   buttonTextColor?: string;
+  buttonText?: string;
+  buttonHref?: string;
 }
 
 const CardNav: React.FC<CardNavProps> = ({
@@ -40,13 +42,25 @@ const CardNav: React.FC<CardNavProps> = ({
   baseColor = '#fff',
   menuColor,
   buttonBgColor,
-  buttonTextColor
+  buttonTextColor,
+  buttonText = 'Get Started',
+  buttonHref
 }) => {
   const [isHamburgerOpen, setIsHamburgerOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isScrolled, setIsScrolled] = useState(false);
   const navRef = useRef<HTMLDivElement | null>(null);
   const cardsRef = useRef<HTMLDivElement[]>([]);
   const tlRef = useRef<gsap.core.Timeline | null>(null);
+
+  // Track scroll position to change navbar style
+  useLayoutEffect(() => {
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 100);
+    };
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   const calculateHeight = () => {
     const navEl = navRef.current;
@@ -160,7 +174,7 @@ const CardNav: React.FC<CardNavProps> = ({
 
   return (
     <div className={`card-nav-container ${className}`}>
-      <nav ref={navRef} className={`card-nav ${isExpanded ? 'open' : ''}`} style={{ backgroundColor: baseColor }}>
+      <nav ref={navRef} className={`card-nav ${isExpanded ? 'open' : ''} ${isScrolled ? 'scrolled' : ''}`} style={{ backgroundColor: isScrolled ? 'rgba(15, 23, 42, 0.95)' : baseColor, backdropFilter: isScrolled ? 'blur(12px)' : undefined, transition: 'background-color 0.3s ease, backdrop-filter 0.3s ease' }}>
         <div className="card-nav-top">
           <div
             className={`hamburger-menu ${isHamburgerOpen ? 'open' : ''}`}
@@ -182,13 +196,23 @@ const CardNav: React.FC<CardNavProps> = ({
             )}
           </div>
 
-          <button
-            type="button"
-            className="card-nav-cta-button"
-            style={{ backgroundColor: buttonBgColor, color: buttonTextColor }}
-          >
-            Get Started
-          </button>
+          {buttonHref ? (
+            <a
+              href={buttonHref}
+              className="card-nav-cta-button"
+              style={{ backgroundColor: buttonBgColor, color: buttonTextColor }}
+            >
+              {buttonText}
+            </a>
+          ) : (
+            <button
+              type="button"
+              className="card-nav-cta-button"
+              style={{ backgroundColor: buttonBgColor, color: buttonTextColor }}
+            >
+              {buttonText}
+            </button>
+          )}
         </div>
 
         <div className="card-nav-content" aria-hidden={!isExpanded}>
