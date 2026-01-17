@@ -121,7 +121,7 @@ const navItems: CardNavItem[] = [
     links: [
       { label: "Docs", href: "#docs", ariaLabel: "View documentation" },
       { label: "API", href: "#api", ariaLabel: "API reference" },
-      { label: "Support", href: "#support", ariaLabel: "Get support" },
+      { label: "Support", href: "/support", ariaLabel: "Get support" },
     ],
   },
 ];
