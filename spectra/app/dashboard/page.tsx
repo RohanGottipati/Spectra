@@ -412,6 +412,9 @@ export default function DashboardPage() {
   const tradesPerAgentRef = useRef(tradesPerAgent);
   const chartWrapRef = useRef<HTMLDivElement | null>(null);
   const [chartSize, setChartSize] = useState({ width: 0, height: 0 });
+  const [simulationStartTime, setSimulationStartTime] = useState<number | null>(
+    null,
+  );
 
   // Supabase state
   const [isTriggering, setIsTriggering] = useState(false);
@@ -472,6 +475,8 @@ export default function DashboardPage() {
       setIsRunning(false);
       return;
     }
+    setTrades([]);
+    setSimulationStartTime(Date.now());
     const id = setInterval(() => {
       const baseTime = Date.now();
       const batch: TradeInput[] = [];
@@ -488,6 +493,16 @@ export default function DashboardPage() {
       addTrades(batch);
     }, 1800);
     setIntervalId(id);
+    setIsRunning(true);
+  };
+
+  const toggleLiveAgents = () => {
+    if (isRunning) {
+      setIsRunning(false);
+      return;
+    }
+    setTrades([]);
+    setSimulationStartTime(Date.now());
     setIsRunning(true);
   };
 
@@ -663,7 +678,7 @@ export default function DashboardPage() {
 
   // Fetch initial trades and subscribe to realtime updates
   useEffect(() => {
-    if (!useRealData) return;
+    if (!useRealData || !isRunning || !simulationStartTime) return;
 
     const supabase = supabaseRef.current;
 
@@ -672,6 +687,7 @@ export default function DashboardPage() {
       const { data, error } = await supabase
         .from("trades")
         .select("*")
+        .gte("created_at", new Date(simulationStartTime).toISOString())
         .order("created_at", { ascending: false })
         .limit(MAX_TRADES);
 
@@ -719,7 +735,7 @@ export default function DashboardPage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [useRealData]);
+  }, [useRealData, isRunning, simulationStartTime]);
 
   // Fetch agent configs from database and subscribe to updates
   useEffect(() => {
@@ -957,6 +973,61 @@ export default function DashboardPage() {
     return grouped;
   }, [visibleTrades]);
 
+  const BASELINE_CHART_VALUE = 100;
+
+  const { minValue, maxValue } = useMemo(() => {
+    if (!visibleTrades.length) {
+      return { minValue: 0, maxValue: BASELINE_CHART_VALUE };
+    }
+    const values = visibleTrades.map((trade) => trade.amount);
+    if (isRunning) {
+      values.push(BASELINE_CHART_VALUE);
+    }
+    let min = Math.min(...values);
+    let max = Math.max(...values);
+    if (!Number.isFinite(min) || !Number.isFinite(max)) {
+      return { minValue: 0, maxValue: BASELINE_CHART_VALUE };
+    }
+    if (min === max) {
+      const pad = Math.max(5, Math.abs(min) * 0.1, 1);
+      min -= pad;
+      max += pad;
+    } else {
+      const pad = (max - min) * 0.1;
+      min -= pad;
+      max += pad;
+    }
+    return { minValue: min, maxValue: max };
+  }, [visibleTrades, isRunning]);
+
+  const yTicks = useMemo(() => {
+    const span = maxValue - minValue;
+    if (!Number.isFinite(span) || span <= 0) {
+      return [minValue];
+    }
+    const targetTickCount = 6;
+    const rawStep = span / Math.max(targetTickCount - 1, 1);
+    const magnitude = 10 ** Math.floor(Math.log10(rawStep));
+    const normalized = rawStep / magnitude;
+    const niceNormalized =
+      normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
+    const step = niceNormalized * magnitude;
+    const start = Math.floor(minValue / step) * step;
+    const end = Math.ceil(maxValue / step) * step;
+    const ticks: number[] = [];
+    for (let v = start; v <= end + step / 2; v += step) {
+      const rounded = Number(v.toFixed(2));
+      ticks.push(rounded);
+    }
+    return ticks;
+  }, [minValue, maxValue]);
+
+  const formatTick = (value: number) => {
+    if (Math.abs(value) >= 1000) return value.toFixed(0);
+    if (Number.isInteger(value)) return String(value);
+    return value.toFixed(1).replace(/\.0$/, "");
+  };
+
   const chartWidth = 900;
   const chartHeight = 380;
   const tooltipWidth = 240;
@@ -964,15 +1035,16 @@ export default function DashboardPage() {
   const chartInnerWidth = chartWidth - chartPadding.left - chartPadding.right;
   const chartInnerHeight = chartHeight - chartPadding.top - chartPadding.bottom;
 
+  const ySpan = Math.max(maxValue - minValue, 1);
   const getX = (time: number) =>
     chartPadding.left + ((time - minTime) / span) * chartInnerWidth;
-  const getY = (score: number) =>
-    chartPadding.top + (1 - score / 100) * chartInnerHeight;
+  const getY = (value: number) =>
+    chartPadding.top + (1 - (value - minValue) / ySpan) * chartInnerHeight;
 
   const hoveredPoint = hoveredTrade
     ? {
         x: getX(hoveredTrade.timestamp.getTime()),
-        y: getY(hoveredTrade.riskScore),
+        y: getY(hoveredTrade.amount),
       }
     : null;
 
@@ -981,7 +1053,7 @@ export default function DashboardPage() {
     return visibleTrades.map((trade) => ({
       trade,
       x: getX(trade.timestamp.getTime()),
-      y: getY(trade.riskScore),
+      y: getY(trade.amount),
     }));
   }, [visibleTrades, getX, getY]);
 
@@ -1118,7 +1190,7 @@ export default function DashboardPage() {
             {useRealData ? (
               <>
                 <ShimmerButton
-                  onClick={() => setIsRunning(!isRunning)}
+                  onClick={toggleLiveAgents}
                   shimmerColor={isRunning ? "#ef4444" : "#10b981"}
                   background={isRunning ? "rgba(239, 68, 68, 0.9)" : "rgba(16, 185, 129, 0.9)"}
                   borderRadius="8px"
@@ -1316,7 +1388,7 @@ export default function DashboardPage() {
                 className="relative rounded-xl bg-gradient-to-br from-slate-100/80 via-white/60 to-slate-50/80 border border-white/80 p-4"
                 onMouseLeave={() => setHoveredTradeId(null)}
               >
-                {trades.length === 0 ? (
+                {trades.length === 0 && !isRunning ? (
                   <div className="flex h-[400px] items-center justify-center">
                     <div className="text-center">
                       <div className="relative">
@@ -1342,32 +1414,12 @@ export default function DashboardPage() {
                     onMouseMove={handleChartMouseMove}
                     onMouseLeave={() => setHoveredTradeId(null)}
                   >
-                    {/* Background zones for risk levels */}
-                    <defs>
-                      <linearGradient id="dangerZone" x1="0%" y1="0%" x2="0%" y2="100%">
-                        <stop offset="0%" stopColor="#fecaca" stopOpacity="0.3" />
-                        <stop offset="100%" stopColor="#fecaca" stopOpacity="0.1" />
-                      </linearGradient>
-                      <linearGradient id="warningZone" x1="0%" y1="0%" x2="0%" y2="100%">
-                        <stop offset="0%" stopColor="#fef3c7" stopOpacity="0.25" />
-                        <stop offset="100%" stopColor="#fef3c7" stopOpacity="0.1" />
-                      </linearGradient>
-                      <linearGradient id="safeZone" x1="0%" y1="0%" x2="0%" y2="100%">
-                        <stop offset="0%" stopColor="#d1fae5" stopOpacity="0.2" />
-                        <stop offset="100%" stopColor="#d1fae5" stopOpacity="0.05" />
-                      </linearGradient>
-                    </defs>
-
-                    {/* Risk zone backgrounds */}
-                    <rect x={chartPadding.left} y={getY(100)} width={chartInnerWidth} height={getY(70) - getY(100)} fill="url(#dangerZone)" />
-                    <rect x={chartPadding.left} y={getY(70)} width={chartInnerWidth} height={getY(45) - getY(70)} fill="url(#warningZone)" />
-                    <rect x={chartPadding.left} y={getY(45)} width={chartInnerWidth} height={getY(0) - getY(45)} fill="url(#safeZone)" />
-
-                    {/* Detailed grid lines - every 5 */}
-                    {[0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100].map((level) => {
+                    {/* Detailed grid lines */}
+                    {yTicks.map((level, index) => {
                       const y = getY(level);
-                      const isMainLine = level % 25 === 0;
-                      const isMidLine = level % 10 === 0 && !isMainLine;
+                      const isMainLine =
+                        index === 0 || index === yTicks.length - 1 || index % 2 === 0;
+                      const isMidLine = !isMainLine;
                       return (
                         <g key={level}>
                           <line
@@ -1382,17 +1434,12 @@ export default function DashboardPage() {
                           />
                           {isMainLine && (
                             <text x={6} y={y + 3} fontSize="9" fontWeight="600" fill="#64748b">
-                              {level}
+                              {formatTick(level)}
                             </text>
                           )}
                         </g>
                       );
                     })}
-
-                    {/* Threshold labels on right side */}
-                    <text x={chartWidth - chartPadding.right + 5} y={getY(85)} fontSize="8" fontWeight="600" fill="#dc2626" opacity="0.7">ROGUE</text>
-                    <text x={chartWidth - chartPadding.right + 5} y={getY(57)} fontSize="8" fontWeight="600" fill="#d97706" opacity="0.7">WARNING</text>
-                    <text x={chartWidth - chartPadding.right + 5} y={getY(22)} fontSize="8" fontWeight="600" fill="#059669" opacity="0.7">SAFE</text>
 
                     {/* Vertical time grid lines */}
                     {[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9].map((pct) => {
@@ -1431,10 +1478,18 @@ export default function DashboardPage() {
                       const points = chartTradesByAgent[agentMeta.id].map((trade) => ({
                         trade,
                         x: getX(trade.timestamp.getTime()),
-                        y: getY(trade.riskScore),
+                        y: getY(trade.amount),
                       }));
-                      if (!points.length) return null;
-                      const linePoints = points.map((point) => `${point.x},${point.y}`).join(" ");
+                      const baselinePoint = isRunning
+                        ? { x: getX(minTime), y: getY(BASELINE_CHART_VALUE) }
+                        : null;
+                      const linePoints = baselinePoint
+                        ? [baselinePoint, ...points]
+                        : points;
+                      if (!linePoints.length) return null;
+                      const linePointsString = linePoints
+                        .map((point) => `${point.x},${point.y}`)
+                        .join(" ");
                       return (
                         <g key={agentMeta.id}>
                           {/* Gradient fill under line */}
@@ -1444,20 +1499,32 @@ export default function DashboardPage() {
                               <stop offset="100%" stopColor={agentMeta.color} stopOpacity="0" />
                             </linearGradient>
                           </defs>
-                          {points.length > 1 && (
+                          {linePoints.length > 1 && (
                             <polygon
-                              points={`${points[0].x},${chartHeight - chartPadding.bottom} ${linePoints} ${points[points.length - 1].x},${chartHeight - chartPadding.bottom}`}
+                              points={`${linePoints[0].x},${chartHeight - chartPadding.bottom} ${linePointsString} ${linePoints[linePoints.length - 1].x},${chartHeight - chartPadding.bottom}`}
                               fill={`url(#gradient-${agentMeta.id})`}
                             />
                           )}
                           <polyline
-                            points={linePoints}
+                            points={linePointsString}
                             fill="none"
                             stroke={agentMeta.color}
                             strokeWidth="2"
                             strokeLinecap="round"
                             strokeLinejoin="round"
                           />
+                          {baselinePoint && (
+                            <circle
+                              cx={baselinePoint.x}
+                              cy={baselinePoint.y}
+                              r={3}
+                              fill={agentMeta.color}
+                              stroke="white"
+                              strokeWidth={1.5}
+                              opacity={0.7}
+                              pointerEvents="none"
+                            />
+                          )}
                           {points.map((point) => {
                             const isHovered = hoveredTradeId === point.trade.id;
                             const radius = point.trade.isBadTrade ? 5 : 3.5;
