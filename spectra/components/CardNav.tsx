@@ -32,6 +32,7 @@ export interface CardNavProps {
   buttonTextColor?: string;
   buttonText?: string;
   buttonHref?: string;
+  actions?: React.ReactNode;
 }
 
 const CardNav: React.FC<CardNavProps> = ({
@@ -47,7 +48,8 @@ const CardNav: React.FC<CardNavProps> = ({
   buttonBgColor,
   buttonTextColor,
   buttonText = 'Get Started',
-  buttonHref
+  buttonHref,
+  actions
 }) => {
   const [isHamburgerOpen, setIsHamburgerOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -209,23 +211,27 @@ const CardNav: React.FC<CardNavProps> = ({
             </div>
           )}
 
-          {buttonHref ? (
-            <a
-              href={buttonHref}
-              className="card-nav-cta-button"
-              style={{ backgroundColor: buttonBgColor, color: buttonTextColor }}
-            >
-              {buttonText}
-            </a>
-          ) : (
-            <button
-              type="button"
-              className="card-nav-cta-button"
-              style={{ backgroundColor: buttonBgColor, color: buttonTextColor }}
-            >
-              {buttonText}
-            </button>
-          )}
+          <div className="card-nav-actions">
+            {actions ? (
+              actions
+            ) : buttonHref ? (
+              <a
+                href={buttonHref}
+                className="card-nav-cta-button"
+                style={{ backgroundColor: buttonBgColor, color: buttonTextColor }}
+              >
+                {buttonText}
+              </a>
+            ) : (
+              <button
+                type="button"
+                className="card-nav-cta-button"
+                style={{ backgroundColor: buttonBgColor, color: buttonTextColor }}
+              >
+                {buttonText}
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="card-nav-content" aria-hidden={!isExpanded}>
