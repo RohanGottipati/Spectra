@@ -1,346 +1,92 @@
 ---
 title: Best Practices
-description: Best practices for deploying and managing AI agents with Spectra
+description: Guidelines for safe agent deployment
 ---
 
 import { Callout } from "fumadocs-ui/components/callout";
-import { Card, Cards } from "fumadocs-ui/components/card";
 
 # Best Practices
 
-Follow these best practices to ensure safe and effective agent deployment.
+## Before Deployment
 
-## Pre-Deployment
-
-### 1. Start with Conservative Parameters
-
-Always begin with conservative risk settings in the sandbox:
+**Start conservative.** Begin with tight limits and gradually increase based on performance.
 
 ```python
 config = Config(
     max_position_size=1000,      # Start small
     max_daily_loss=500,          # Tight loss limit
     risk_tolerance='conservative',
-    max_frequency_per_min=5,     # Low frequency
-    allowed_strategies=['momentum']  # Limited to one strategy
+    max_frequency_per_min=5
 )
 ```
 
-### 2. Validate in Sandbox First
-
-Never skip the sandbox testing phase:
+**Test thoroughly.** Run backtests across multiple market conditions.
 
 ```python
-# 1. Deploy to sandbox
 agent.deploy(environment='sandbox')
 
-# 2. Run extensive backtests
 results = agent.run_backtest(
     start_date='2024-01-01',
     end_date='2026-01-17',
     initial_capital=100000
 )
 
-# 3. Analyze results
+# Validate key metrics
 assert results.sharpe_ratio > 1.0
 assert results.max_drawdown < 0.25
-assert results.win_rate > 0.55
 ```
 
-### 3. Monitor Agent Metrics
+## Production
 
-Key metrics to monitor:
-
-- **Sharpe Ratio** - Risk-adjusted returns (target: > 1.0)
-- **Win Rate** - Percentage of profitable trades (target: > 50%)
-- **Max Drawdown** - Largest peak-to-trough decline (target: < 25%)
-- **Frequency** - Trades per day (ensure it doesn't exceed limits)
-
-### 4. Test Multiple Market Conditions
+**Always enable circuit breaker.**
 
 ```python
-# Test in different market scenarios
-test_periods = [
-    ('2024-01-01', '2024-03-31'),  # Bull market
-    ('2024-09-01', '2024-12-31'),  # Bear market
-    ('2025-01-01', '2025-06-30'),  # Sideways market
-]
-
-for start, end in test_periods:
-    results = agent.run_backtest(start_date=start, end_date=end)
-    assert results.sharpe_ratio > 0.8  # Different threshold for bear
-    print(f"Period {start}-{end}: SR={results.sharpe_ratio}")
-```
-
-## Deployment
-
-### 1. Set Appropriate Limits
-
-Scale limits based on sandbox performance:
-
-```python
-# If backtesting showed good results with $1k positions:
-config = Config(
-    max_position_size=5000,      # Scale up cautiously
-    max_daily_loss=2500,         # Proportional to position size
-    risk_tolerance='moderate',   # Increase gradually
-    max_frequency_per_min=15,    # Based on test frequency
-)
-```
-
-### 2. Enable Circuit Breaker
-
-Always deploy with circuit breaker enabled:
-
-```python
-deployment = agent.deploy(
+agent.deploy(
     environment='production',
-    circuit_breaker=True,  # Must be enabled
+    circuit_breaker=True,
     alert_email='your-email@example.com'
 )
 ```
 
-### 3. Configure Alerts
-
-Set up comprehensive monitoring:
+**Set up alerts.**
 
 ```python
-# Register critical event handlers
-agent.on_rogue_detected(callback=send_alert_email)
-agent.on_anomaly_detected(callback=send_slack_notification)
-agent.on_circuit_breaker_triggered(callback=immediate_escalation)
-
-# Set alert thresholds
-agent.set_alert_threshold('risk_score', 70)
-agent.set_alert_threshold('daily_loss', 0.8)  # 80% of limit
+agent.on_rogue_detected(callback=send_alert)
+agent.on_anomaly_detected(callback=notify_team)
+agent.on_circuit_breaker_triggered(callback=escalate)
 ```
 
 ## Monitoring
 
-### 1. Regular Health Checks
-
-Check agent health regularly:
-
-```python
-import schedule
-import time
-
-def health_check():
-    agent_status = agent.get_status()
-
-    if agent_status.risk_score > 60:
-        send_alert("High risk score detected")
-
-    if agent_status.daily_pnl < -1000:
-        send_alert("Significant losses today")
-
-    if agent_status.anomaly_count > 5:
-        send_alert("Multiple anomalies detected")
-
-schedule.every(1).hours.do(health_check)
-```
-
-### 2. Review Metrics Daily
-
-```python
-def daily_review():
-    analytics = agent.get_analytics(
-        agent_id='your-agent-id',
-        start_date=today,
-        end_date=today
-    )
-
-    print(f"Trades: {analytics.total_trades}")
-    print(f"Win Rate: {analytics.win_rate:.2%}")
-    print(f"Daily PnL: ${analytics.daily_pnl}")
-
-    if analytics.win_rate < 0.45:
-        manual_review_required()
-```
-
-### 3. Monitor Behavior Trends
-
-```python
-# Track behavior classification over time
-weekly_analytics = agent.get_analytics(
-    start_date=week_start,
-    end_date=week_end
-)
-
-behavior_distribution = weekly_analytics.behavior_breakdown
-aggressive_pct = behavior_distribution['aggressive']
-
-if aggressive_pct > 0.30:  # More than 30% aggressive
-    investigate_agent_behavior()
-```
-
-## Safety Checklist
-
-- [ ] Configuration validated in sandbox
-- [ ] Backtested across multiple market conditions
-- [ ] Sharpe ratio > 1.0 in testing
-- [ ] Max drawdown < 25%
-- [ ] Position sizes appropriate for your risk
-- [ ] Circuit breaker enabled for production
-- [ ] Alert notifications configured
-- [ ] Team informed of deployment
-- [ ] Manual override procedures documented
-- [ ] Regular monitoring schedule established
-
-## Escalation Procedures
-
-### 1. Anomaly Detected
-
-**Severity: Medium**
-
-```python
-def handle_anomaly(event):
-    # 1. Log the anomaly
-    logger.warning(f"Anomaly detected: {event.data}")
-
-    # 2. Notify team
-    send_slack_notification(f"Anomaly: {event.data['anomalies']}")
-
-    # 3. Monitor closely
-    agent.increase_monitoring_frequency()
-
-    # 4. Manual review within 1 hour
-```
-
-### 2. Rogue Behavior Detected
-
-**Severity: High**
-
-```python
-def handle_rogue_behavior(event):
-    # 1. Immediate notification
-    send_critical_alert(event.data)
-
-    # 2. Manual intervention
-    agent.request_manual_approval()
-
-    # 3. Prepare for circuit breaker
-    # (automatic halt if continues)
-```
-
-### 3. Circuit Breaker Triggered
-
-**Severity: Critical**
-
-```python
-def handle_circuit_breaker(event):
-    # 1. Immediate team notification
-    call_on_duty_engineer()
-
-    # 2. Post mortem
-    create_incident_report(event)
-
-    # 3. Review and fix
-    # - Adjust parameters
-    # - Retrain agent
-    # - Redeploy to sandbox
-```
-
-## Common Issues
-
-### High Risk Score
-
-**Symptoms**: Risk score consistently > 70
-
-**Investigation**:
-
-1. Check daily loss amount
-2. Review position sizes
-3. Analyze trade frequency
-4. Examine strategy decisions
-
-**Resolution**:
-
-```python
-# Reduce position size
-config.max_position_size *= 0.8
-
-# Lower frequency
-config.max_frequency_per_min *= 0.7
-
-# Restrict strategies
-config.allowed_strategies = ['conservative_strategy']
-```
-
-### Low Win Rate
-
-**Symptoms**: Win rate < 45%
-
-**Investigation**:
-
-1. Compare sandbox vs production performance
-2. Check market conditions
-3. Analyze failed trades
-4. Review strategy logic
-
-**Resolution**:
-
-```python
-# Return to sandbox for retraining
-agent.deploy(environment='sandbox')
-
-# Adjust parameters
-# Modify strategy
-# Retrain on new data
-```
-
-### Excessive Anomalies
-
-**Symptoms**: 5+ anomalies per day
-
-**Investigation**:
-
-1. Review anomaly types
-2. Check agent configuration
-3. Analyze market volatility
-4. Review alert thresholds
-
-**Resolution**:
-
-- Adjust anomaly detection thresholds
-- Recalibrate risk parameters
-- Review market conditions
-- Consider manual override
-
-## Performance Optimization
-
-### 1. Optimize Trade Frequency
-
-Monitor and adjust frequency limits:
-
-```python
-# If trading too much
-config.max_frequency_per_min = 10  # Reduce from 15
-
-# If underutilizing
-config.max_frequency_per_min = 20  # Increase from 15
-```
-
-### 2. Fine-Tune Risk Tolerance
-
-```python
-# Gradually increase risk based on performance
-if metrics.sharpe_ratio > 1.5:
-    config.risk_tolerance = 'moderate'
-    config.max_position_size *= 1.2
-```
-
-### 3. Strategy Diversification
-
-```python
-# Add more strategies as confidence grows
-config.allowed_strategies = [
-    'momentum',
-    'arbitrage',
-    'mean_reversion'
-]
-```
-
-<Callout type="info">
-  Always test strategy additions in sandbox first before enabling in production.
+**Key metrics to watch:**
+- Sharpe ratio > 1.0
+- Win rate > 50%
+- Max drawdown < 25%
+- Risk score < 70
+
+**Daily review checklist:**
+- Check daily PnL
+- Review behavior classification
+- Monitor anomaly count
+- Verify within position limits
+
+## Incident Response
+
+| Event | Severity | Action |
+|-------|----------|--------|
+| Anomaly detected | Medium | Monitor closely, review within 1 hour |
+| Rogue behavior | High | Request manual approval, prepare for halt |
+| Circuit breaker | Critical | Immediate investigation, post-mortem |
+
+<Callout type="warn">
+  When circuit breaker triggers: return to sandbox, adjust parameters, revalidate before redeploying.
 </Callout>
+
+## Checklist
+
+- [ ] Validated in sandbox with multiple market conditions
+- [ ] Sharpe > 1.0, drawdown < 25%
+- [ ] Position sizes appropriate for risk tolerance
+- [ ] Circuit breaker enabled
+- [ ] Alerts configured
+- [ ] Manual override procedures documented

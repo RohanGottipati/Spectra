@@ -1,154 +1,58 @@
 ---
 title: API Reference
-description: Complete API documentation for Spectra SDK
+description: SDK and REST API documentation
 ---
 
 import { Callout } from "fumadocs-ui/components/callout";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "fumadocs-ui/components/tabs";
 
 # API Reference
 
-Complete reference for the Spectra SDK and REST API.
-
 ## Authentication
-
-All API requests require authentication using your API key.
 
 ```bash
 Authorization: Bearer YOUR_API_KEY
 ```
 
-Store your API key in an environment variable:
-
-```bash
-export SPECTRA_API_KEY=your-api-key
-```
-
 <Callout type="warn">
-  Never commit your API key to version control. Always use environment variables
-  or a secrets manager.
+  Store your API key in environment variables. Never commit to version control.
 </Callout>
 
-## Agent Configuration
+## SDK
 
-### Config Object
-
-Configuration parameters for controlling agent behavior:
+### Config
 
 ```typescript
 interface Config {
-  maxPositionSize: number; // Max size for a single position
-  maxDailyLoss: number; // Stop trading if daily loss exceeds this
-  riskTolerance: "conservative" | "moderate" | "aggressive";
-  maxFrequencyPerMin: number; // Max trades per minute
-  allowedStrategies: string[]; // Allowed trading strategies
-  preferredTokens?: string[]; // Preferred tokens to trade
-  description?: string; // Agent description
+  maxPositionSize: number;
+  maxDailyLoss: number;
+  riskTolerance: 'conservative' | 'moderate' | 'aggressive';
+  maxFrequencyPerMin: number;
+  allowedStrategies: string[];
+  preferredTokens?: string[];
 }
 ```
 
-### Creating an Agent
-
-<Tabs defaultValue="python">
-  <TabsList>
-    <TabsTrigger value="python">Python</TabsTrigger>
-    <TabsTrigger value="typescript">TypeScript</TabsTrigger>
-  </TabsList>
-  <TabsContent value="python">
-```python
-from spectra import Agent, Config
-
-config = Config(
-max_position_size=10000,
-max_daily_loss=5000,
-risk_tolerance='moderate',
-max_frequency_per_min=10,
-allowed_strategies=['momentum', 'arbitrage'],
-preferred_tokens=['SOL', 'USDC', 'RAY']
-)
-
-agent = Agent(
-name='MyAgent',
-config=config,
-api_key='your-api-key'
-)
-
-````
-  </TabsContent>
-  <TabsContent value="typescript">
-```typescript
-import { Agent, Config } from '@spectra/sdk';
-
-const config: Config = {
-  maxPositionSize: 10000,
-  maxDailyLoss: 5000,
-  riskTolerance: 'moderate',
-  maxFrequencyPerMin: 10,
-  allowedStrategies: ['momentum', 'arbitrage'],
-  preferredTokens: ['SOL', 'USDC', 'RAY']
-};
-
-const agent = new Agent({
-  name: 'MyAgent',
-  config,
-  apiKey: process.env.SPECTRA_API_KEY
-});
-````
-
-  </TabsContent>
-</Tabs>
-
-## Deployment
-
-### Sandbox Deployment
-
-Test your agent in a risk-free environment:
+### Agent Methods
 
 ```python
-# Deploy to sandbox
-agent.deploy(environment='sandbox')
+# Deploy
+agent.deploy(environment='sandbox')  # or 'production'
+agent.deploy(environment='production', circuit_breaker=True)
 
-# Run backtesting
-results = agent.run_backtest(
-    start_date='2026-01-01',
-    end_date='2026-01-17',
-    initial_capital=100000
-)
+# Backtest
+results = agent.run_backtest(start_date, end_date, initial_capital)
 
-print(f"Sharpe Ratio: {results.sharpe_ratio}")
-print(f"Max Drawdown: {results.max_drawdown}")
-print(f"Win Rate: {results.win_rate}")
+# Event handlers
+agent.on_rogue_detected(callback)
+agent.on_anomaly_detected(callback)
+agent.on_circuit_breaker_triggered(callback)
 ```
 
-### Production Deployment
-
-Deploy with automatic circuit breaker protection:
-
-```python
-# Deploy to production
-deployment = agent.deploy(
-    environment='production',
-    circuit_breaker=True,
-    alert_email='your-email@example.com'
-)
-
-print(deployment.agent_id)  # Agent ID for monitoring
-```
-
-## REST API Endpoints
+## REST API
 
 ### Log Trade
 
 **POST** `/api/v1/trade`
-
-Log a trade for behavior analysis.
-
-#### Request Body
 
 ```json
 {
@@ -156,17 +60,13 @@ Log a trade for behavior analysis.
   "action": "buy",
   "token": "SOL",
   "amount": 1000,
-  "timestamp": "2026-01-17T10:00:00Z",
-  "strategy": "momentum",
-  "confidence": 0.85
+  "strategy": "momentum"
 }
 ```
 
-#### Response
-
+Response:
 ```json
 {
-  "success": true,
   "tradeId": "trade_12345",
   "behavior": "conservative",
   "riskScore": 15
@@ -177,10 +77,6 @@ Log a trade for behavior analysis.
 
 **GET** `/api/v1/agent/:agentId`
 
-Retrieve current agent behavior status.
-
-#### Response
-
 ```json
 {
   "agentId": "alpha",
@@ -188,26 +84,13 @@ Retrieve current agent behavior status.
   "behavior": "conservative",
   "totalTrades": 145,
   "dailyPnL": 2500,
-  "riskScore": 25,
-  "lastUpdated": "2026-01-17T10:05:00Z"
+  "riskScore": 25
 }
 ```
 
 ### Get Analytics
 
-**GET** `/api/v1/analytics`
-
-Get aggregated behavior analytics.
-
-#### Query Parameters
-
-| Parameter   | Type   | Description         |
-| ----------- | ------ | ------------------- |
-| `agentId`   | string | Filter by agent ID  |
-| `startDate` | string | ISO 8601 start date |
-| `endDate`   | string | ISO 8601 end date   |
-
-#### Response
+**GET** `/api/v1/analytics?agentId=alpha&startDate=2026-01-01`
 
 ```json
 {
@@ -227,141 +110,43 @@ Get aggregated behavior analytics.
 
 ### Event Types
 
-Subscribe to real-time events:
-
-#### `agent.rogue_detected`
-
-Triggered when an agent exhibits rogue behavior.
-
+**agent.rogue_detected**
 ```json
 {
   "event": "agent.rogue_detected",
-  "timestamp": "2026-01-17T10:00:00Z",
-  "data": {
-    "agentId": "alpha",
-    "riskScore": 87,
-    "reason": "High frequency trading detected"
-  }
+  "data": { "agentId": "alpha", "riskScore": 87, "reason": "High frequency trading" }
 }
 ```
 
-#### `agent.anomaly_detected`
-
-Triggered when anomalous patterns are detected.
-
+**agent.anomaly_detected**
 ```json
 {
   "event": "agent.anomaly_detected",
-  "timestamp": "2026-01-17T10:00:00Z",
-  "data": {
-    "agentId": "alpha",
-    "anomalies": ["unusual_position_size", "rapid_liquidations"],
-    "severity": "high"
-  }
+  "data": { "agentId": "alpha", "anomalies": ["unusual_position_size"], "severity": "high" }
 }
 ```
 
-#### `circuit_breaker.triggered`
-
-Triggered when circuit breaker halts an agent.
-
+**circuit_breaker.triggered**
 ```json
 {
   "event": "circuit_breaker.triggered",
-  "timestamp": "2026-01-17T10:00:00Z",
-  "data": {
-    "agentId": "alpha",
-    "reason": "Max daily loss exceeded",
-    "lossAmount": 5234.5
-  }
-}
-```
-
-### Registering Webhooks
-
-<Tabs defaultValue="python">
-  <TabsList>
-    <TabsTrigger value="python">Python</TabsTrigger>
-    <TabsTrigger value="typescript">TypeScript</TabsTrigger>
-  </TabsList>
-  <TabsContent value="python">
-```python
-# Register webhook handlers
-agent.on_rogue_detected(
-    callback=handle_rogue_behavior,
-    alert_level='critical'
-)
-
-agent.on_anomaly_detected(
-callback=handle_anomaly,
-alert_level='warning'
-)
-
-agent.on_circuit_breaker_triggered(
-callback=handle_circuit_breaker,
-alert_level='critical'
-)
-
-````
-  </TabsContent>
-  <TabsContent value="typescript">
-```typescript
-// Register webhook handlers
-agent.onRogueDetected((event) => {
-  console.log('Rogue behavior detected:', event.data);
-  // Handle rogue behavior
-});
-
-agent.onAnomalyDetected((event) => {
-  console.log('Anomaly detected:', event.data);
-  // Handle anomaly
-});
-
-agent.onCircuitBreakerTriggered((event) => {
-  console.log('Circuit breaker triggered:', event.data);
-  // Handle circuit breaker
-});
-````
-
-  </TabsContent>
-</Tabs>
-
-## Error Handling
-
-### Common Errors
-
-| Error Code | Description                      |
-| ---------- | -------------------------------- |
-| `401`      | Unauthorized - Invalid API key   |
-| `400`      | Bad Request - Invalid parameters |
-| `404`      | Not Found - Agent not found      |
-| `429`      | Rate Limited - Too many requests |
-| `500`      | Server Error - Internal error    |
-
-### Error Response
-
-```json
-{
-  "error": "INVALID_CONFIG",
-  "message": "Max daily loss must be greater than 0",
-  "statusCode": 400
+  "data": { "agentId": "alpha", "reason": "Max daily loss exceeded", "lossAmount": 5234.5 }
 }
 ```
 
 ## Rate Limits
 
-- **Free Tier**: 100 requests/minute
-- **Pro Tier**: 1,000 requests/minute
-- **Enterprise**: Custom limits
+| Tier | Limit |
+|------|-------|
+| Free | 100/min |
+| Pro | 1,000/min |
+| Enterprise | Custom |
 
-Rate limit information is included in response headers:
+## Error Codes
 
-```
-X-RateLimit-Limit: 100
-X-RateLimit-Remaining: 95
-X-RateLimit-Reset: 1642425600
-```
-
-<Callout type="info">
-  Contact support for higher rate limits or enterprise plans.
-</Callout>
+| Code | Description |
+|------|-------------|
+| 401 | Invalid API key |
+| 400 | Invalid parameters |
+| 404 | Agent not found |
+| 429 | Rate limited |

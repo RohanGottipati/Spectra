@@ -635,22 +635,42 @@ export default function DashboardPage() {
   const triggerAgents = async () => {
     setIsTriggering(true);
     setLastTriggerResult(null);
+
+    const url = `${SUPABASE_URL}/functions/v1/trigger-agents`;
+    console.log("[Spectra] Triggering agents...");
+    console.log("[Spectra] URL:", url);
+    console.log("[Spectra] SUPABASE_URL env:", SUPABASE_URL);
+
     try {
-      const response = await fetch(
-        `${SUPABASE_URL}/functions/v1/trigger-agents`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-        }
-      );
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      console.log("[Spectra] Response status:", response.status);
+      console.log("[Spectra] Response ok:", response.ok);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("[Spectra] Error response:", errorText);
+        setLastTriggerResult(`Error: ${response.status}`);
+        return;
+      }
+
       const result = await response.json();
+      console.log("[Spectra] Result:", result);
+
       const successCount = result.triggered?.filter(
         (r: { status: string }) => r.status === "success"
       ).length || 0;
       setLastTriggerResult(`Triggered ${successCount}/3 agents`);
     } catch (error) {
-      console.error("Error triggering agents:", error);
-      setLastTriggerResult("Error triggering agents");
+      console.error("[Spectra] Fetch error:", error);
+      console.error("[Spectra] Error type:", (error as Error).name);
+      console.error("[Spectra] Error message:", (error as Error).message);
+      setLastTriggerResult(`Network error - check console`);
     } finally {
       setIsTriggering(false);
     }
