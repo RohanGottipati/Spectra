@@ -189,7 +189,7 @@ export default function Page() {
       <section className="relative min-h-screen w-full overflow-hidden">
         <div className="absolute inset-0 w-full h-full">
           <Iridescence
-            color={[0.18, 0.78, 0.82]}
+            color={[0.03, 0.52, 0.68]}
             speed={0.12}
             amplitude={0.05}
             mouseReact={true}

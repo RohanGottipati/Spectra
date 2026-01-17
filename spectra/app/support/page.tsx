@@ -94,7 +94,7 @@ export default function SupportPage() {
               <Select
                 value={formData.subject}
                 onValueChange={(value) =>
-                  setFormData({ ...formData, subject: value })
+                  setFormData({ ...formData, subject: value ?? "" })
                 }
                 required
               >
