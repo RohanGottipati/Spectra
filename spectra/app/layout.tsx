@@ -21,11 +21,11 @@ export default function RootLayout({
     <html lang="en">
       <head>
         <link
-          href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700&display=swap"
+          href="https://fonts.cdnfonts.com/css/satoshi"
           rel="stylesheet"
         />
       </head>
-      <body className={`${geistMono.variable} font-sans antialiased`}>
+      <body className={`${geistMono.variable} antialiased`} style={{ fontFamily: "'Satoshi', system-ui, sans-serif" }}>
         {children}
       </body>
     </html>

@@ -11,6 +11,7 @@ interface GradientTextProps {
   direction?: 'horizontal' | 'vertical' | 'diagonal';
   pauseOnHover?: boolean;
   yoyo?: boolean;
+  outline?: boolean;
 }
 
 export default function GradientText({
@@ -21,7 +22,8 @@ export default function GradientText({
   showBorder = false,
   direction = 'horizontal',
   pauseOnHover = false,
-  yoyo = true
+  yoyo = true,
+  outline = false
 }: GradientTextProps) {
   const [isPaused, setIsPaused] = useState(false);
   const progress = useMotionValue(0);
@@ -96,15 +98,15 @@ export default function GradientText({
   };
 
   return (
-    <motion.div
+    <motion.span
       className={`animated-gradient-text ${showBorder ? 'with-border' : ''} ${className}`}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
-      {showBorder && <motion.div className="gradient-overlay" style={{ ...gradientStyle, backgroundPosition }} />}
-      <motion.div className="text-content" style={{ ...gradientStyle, backgroundPosition }}>
+      {showBorder && <motion.span className="gradient-overlay" style={{ ...gradientStyle, backgroundPosition }} />}
+      <motion.span className={`text-content ${outline ? 'with-outline' : ''}`} style={{ ...gradientStyle, backgroundPosition }}>
         {children}
-      </motion.div>
-    </motion.div>
+      </motion.span>
+    </motion.span>
   );
 }

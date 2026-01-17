@@ -1,7 +1,11 @@
 .animated-gradient-text {
   position: relative;
-  margin: 0 auto;
+  display: inline;
+}
+
+.animated-gradient-text.block {
   display: flex;
+  margin: 0 auto;
   max-width: fit-content;
   flex-direction: row;
   align-items: center;
@@ -57,7 +61,7 @@
 }
 
 .text-content {
-  display: inline-block;
+  display: inline;
   position: relative;
   z-index: 2;
   background-size: 300% 100%;
@@ -65,4 +69,8 @@
   -webkit-background-clip: text;
   color: transparent;
   animation: gradient linear infinite;
+}
+
+.text-content.with-outline {
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.3));
 }
