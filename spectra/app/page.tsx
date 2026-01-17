@@ -100,18 +100,18 @@ const navItems: CardNavItem[] = [
     textColor: "#e2e8f0",
     links: [
       { label: "Features", href: "#features", ariaLabel: "View features" },
-      { label: "Pricing", href: "#pricing", ariaLabel: "View pricing" },
+      { label: "Dashboard", href: "/dashboard", ariaLabel: "View dashboard" },
       { label: "Waitlist", href: "/waitlist", ariaLabel: "Join the waitlist" },
     ],
   },
   {
-    label: "Company",
+    label: "Developers",
     bgColor: "#164e63",
     textColor: "#e2e8f0",
     links: [
-      { label: "About", href: "#about", ariaLabel: "About us" },
-      { label: "Blog", href: "#blog", ariaLabel: "Read our blog" },
-      { label: "Careers", href: "#careers", ariaLabel: "View careers" },
+      { label: "SDK", href: "/sdk", ariaLabel: "View SDK" },
+      { label: "Docs", href: "/docs", ariaLabel: "View documentation" },
+      { label: "API Reference", href: "/docs/api", ariaLabel: "API reference" },
     ],
   },
   {
@@ -119,8 +119,8 @@ const navItems: CardNavItem[] = [
     bgColor: "#312e81",
     textColor: "#e2e8f0",
     links: [
-      { label: "Docs", href: "#docs", ariaLabel: "View documentation" },
-      { label: "API", href: "#api", ariaLabel: "API reference" },
+      { label: "GitHub", href: "https://github.com", ariaLabel: "View GitHub" },
+      { label: "Discord", href: "#discord", ariaLabel: "Join Discord" },
       { label: "Support", href: "#support", ariaLabel: "Get support" },
     ],
   },
@@ -472,6 +472,7 @@ export default function Page() {
           </div>
         </div>
       </section>
+
 
       {/* CTA Section - Aurora */}
       <section className="relative h-[70vh] w-full bg-slate-900 overflow-hidden">

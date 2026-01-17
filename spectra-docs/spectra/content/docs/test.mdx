@@ -1,0 +1,454 @@
+---
+title: Components
+description: Reusable UI components for building beautiful documentation pages
+---
+
+import {
+  FeatureCard,
+  Step,
+  Alert,
+  CodeBlock,
+  ComparisonTable,
+  Timeline,
+  Badge,
+  StatsGrid,
+  HeroSection,
+} from "@/components";
+
+Spectra Docs comes with a set of custom UI components designed to enhance your documentation pages. All components are fully typed with TypeScript and built with Tailwind CSS.
+
+## Installation
+
+All components are available in the `@/components` directory and can be imported directly:
+
+```tsx
+import { FeatureCard, Alert, Badge } from "@/components";
+```
+
+---
+
+## FeatureCard
+
+Display features with an icon, title, and description in a card layout.
+
+### Props
+
+- `icon` (ReactNode) - Icon element to display
+- `title` (string) - Feature title
+- `description` (string) - Feature description
+
+### Example
+
+```tsx
+<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+  <FeatureCard
+    icon="⚡"
+    title="Fast Deployment"
+    description="Deploy your agents in seconds with zero configuration"
+  />
+  <FeatureCard
+    icon="🔐"
+    title="Secure by Default"
+    description="Built-in security controls and monitoring"
+  />
+  <FeatureCard
+    icon="📈"
+    title="Real-time Analytics"
+    description="Monitor agent performance with live dashboards"
+  />
+</div>
+```
+
+<div className="grid grid-cols-1 md:grid-cols-3 gap-4 my-6">
+  <FeatureCard
+    icon="⚡"
+    title="Fast Deployment"
+    description="Deploy your agents in seconds with zero configuration"
+  />
+  <FeatureCard
+    icon="🔐"
+    title="Secure by Default"
+    description="Built-in security controls and monitoring"
+  />
+  <FeatureCard
+    icon="📈"
+    title="Real-time Analytics"
+    description="Monitor agent performance with live dashboards"
+  />
+</div>
+
+---
+
+## Step
+
+Create numbered step-by-step tutorials with the Step component.
+
+### Props
+
+- `number` (number) - Step number
+- `title` (string) - Step title
+- `children` (ReactNode) - Step content
+
+### Example
+
+```tsx
+<Step number={1} title="Install the SDK">
+  Run the installation command for your preferred language.
+</Step>
+
+<Step number={2} title="Configure Your Agent">
+  Set up your agent configuration file with API keys.
+</Step>
+```
+
+<Step number={1} title="Install the SDK">
+  Run the installation command for your preferred language.
+</Step>
+
+<Step number={2} title="Configure Your Agent">
+  Set up your agent configuration file with API keys and endpoints.
+</Step>
+
+---
+
+## Alert
+
+Display important information with styled alert boxes. Available in 4 variants.
+
+### Props
+
+- `type` ('info' | 'success' | 'warning' | 'error') - Alert type
+- `title` (string, optional) - Alert title
+- `children` (ReactNode) - Alert content
+
+### Example
+
+```tsx
+<Alert type="info" title="Pro Tip">
+  Enable debug mode to see detailed logs during development.
+</Alert>
+
+<Alert type="success">
+  Your agent has been successfully deployed!
+</Alert>
+
+<Alert type="warning" title="Caution">
+  This action cannot be undone. Make sure to backup your data.
+</Alert>
+
+<Alert type="error" title="Error">
+  Failed to connect to the API. Check your network connection.
+</Alert>
+```
+
+<Alert type="info" title="Pro Tip">
+  Enable debug mode to see detailed logs during development.
+</Alert>
+
+<Alert type="success">Your agent has been successfully deployed!</Alert>
+
+<Alert type="warning" title="Caution">
+  This action cannot be undone. Make sure to backup your data.
+</Alert>
+
+<Alert type="error" title="Error">
+  Failed to connect to the API. Check your network connection.
+</Alert>
+
+---
+
+## CodeBlock
+
+Enhanced code blocks with optional titles and language highlighting.
+
+### Props
+
+- `code` (string) - Code content
+- `language` (string, optional) - Programming language
+- `title` (string, optional) - Code block title
+
+### Example
+
+```tsx
+<CodeBlock
+  title="agent.config.json"
+  language="json"
+  code={`{
+  "agent_id": "my-agent",
+  "api_key": "spec_live_xxx",
+  "environment": "production"
+}`}
+/>
+```
+
+<CodeBlock
+  title="agent.config.json"
+  language="json"
+  code={`{
+  "agent_id": "my-agent",
+  "api_key": "spec_live_xxx",
+  "environment": "production"
+}`}
+/>
+
+---
+
+## Badge
+
+Colored badges for status, categories, or labels. Available in 5 variants.
+
+### Props
+
+- `variant` ('default' | 'success' | 'warning' | 'error' | 'info') - Badge color
+- `children` (ReactNode) - Badge content
+
+### Example
+
+```tsx
+<Badge variant="default">Default</Badge>
+<Badge variant="success">Active</Badge>
+<Badge variant="warning">Beta</Badge>
+<Badge variant="error">Deprecated</Badge>
+<Badge variant="info">New</Badge>
+```
+
+<div className="flex gap-2 my-4">
+  <Badge variant="default">Default</Badge>
+  <Badge variant="success">Active</Badge>
+  <Badge variant="warning">Beta</Badge>
+  <Badge variant="error">Deprecated</Badge>
+  <Badge variant="info">New</Badge>
+</div>
+
+---
+
+## ComparisonTable
+
+Styled tables for comparing features, pricing, or specifications.
+
+### Props
+
+- `children` (ReactNode) - Table content (thead, tbody, tr, td)
+
+### Example
+
+```tsx
+<ComparisonTable>
+  <thead>
+    <tr>
+      <th>Feature</th>
+      <th>Free</th>
+      <th>Pro</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Sandboxed Testing</td>
+      <td>✅ Unlimited</td>
+      <td>✅ Unlimited</td>
+    </tr>
+    <tr>
+      <td>Production Agents</td>
+      <td>5 agents</td>
+      <td>Unlimited</td>
+    </tr>
+  </tbody>
+</ComparisonTable>
+```
+
+<ComparisonTable>
+  <thead>
+    <tr>
+      <th>Feature</th>
+      <th>Free</th>
+      <th>Pro</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Sandboxed Testing</td>
+      <td>✅ Unlimited</td>
+      <td>✅ Unlimited</td>
+    </tr>
+    <tr>
+      <td>Production Agents</td>
+      <td>5 agents</td>
+      <td>Unlimited</td>
+    </tr>
+    <tr>
+      <td>Real-time Monitoring</td>
+      <td>Basic</td>
+      <td>Advanced</td>
+    </tr>
+  </tbody>
+</ComparisonTable>
+
+---
+
+## Timeline
+
+Vertical timeline component for showing chronological events or processes.
+
+### Props
+
+- `items` (array) - Timeline items with `icon`, `title`, and `description`
+
+### Example
+
+```tsx
+<Timeline
+  items={[
+    {
+      icon: "1",
+      title: "Development",
+      description: "Test your agent in the sandbox environment",
+    },
+    {
+      icon: "2",
+      title: "Review",
+      description: "Analyze test results and metrics",
+    },
+    {
+      icon: "3",
+      title: "Deploy",
+      description: "Push to production with confidence",
+    },
+  ]}
+/>
+```
+
+<Timeline
+  items={[
+    {
+      icon: "1",
+      title: "Development",
+      description:
+        "Test your agent in the sandbox environment with simulated scenarios",
+    },
+    {
+      icon: "2",
+      title: "Review",
+      description:
+        "Analyze test results, performance metrics, and safety checks",
+    },
+    {
+      icon: "3",
+      title: "Deploy",
+      description:
+        "Push to production with confidence and real-time monitoring",
+    },
+  ]}
+/>
+
+---
+
+## StatsGrid
+
+Display key metrics and statistics in a responsive grid.
+
+### Props
+
+- `stats` (array) - Statistics with `value`, `label`, and optional `change`
+
+### Example
+
+```tsx
+<StatsGrid
+  stats={[
+    { value: "99.9%", label: "Uptime", change: "+0.1%" },
+    { value: "2.3s", label: "Avg Response", change: "-12%" },
+    { value: "15K", label: "Active Agents", change: "+34%" },
+  ]}
+/>
+```
+
+<StatsGrid
+  stats={[
+    { value: "99.9%", label: "Uptime", change: "+0.1%" },
+    { value: "2.3s", label: "Avg Response Time", change: "-12%" },
+    { value: "15K", label: "Active Agents", change: "+34%" },
+    { value: "1.2M", label: "Total Requests", change: "+45%" },
+  ]}
+/>
+
+---
+
+## HeroSection
+
+Create impactful hero sections with title, subtitle, and call-to-action buttons.
+
+### Props
+
+- `title` (string) - Main heading
+- `subtitle` (string) - Supporting text
+- `primaryCta` (object, optional) - Primary button with `text` and `href`
+- `secondaryCta` (object, optional) - Secondary button with `text` and `href`
+
+### Example
+
+```tsx
+<HeroSection
+  title="Build Safer AI Agents"
+  subtitle="Test and monitor your agents before they interact with production systems"
+  primaryCta={{ text: "Get Started", href: "/docs/getting-started" }}
+  secondaryCta={{ text: "View Docs", href: "/docs" }}
+/>
+```
+
+<HeroSection
+  title="Build Safer AI Agents"
+  subtitle="Test and monitor your agents before they interact with production systems. Get complete visibility into agent behavior with Spectra's pre-flight sandbox and real-time circuit breaker."
+  primaryCta={{ text: "Get Started", href: "/docs/getting-started" }}
+  secondaryCta={{ text: "View API Docs", href: "/docs/api-reference" }}
+/>
+
+---
+
+## Best Practices
+
+### Component Composition
+
+Combine components to create rich, informative documentation pages:
+
+```tsx
+<HeroSection
+  title="Agent Deployment Guide"
+  subtitle="Learn how to safely deploy AI agents to production"
+/>
+
+<Alert type="info" title="Before You Start">
+  Make sure you've completed the sandbox testing phase.
+</Alert>
+
+<Step number={1} title="Configure Your Agent">
+  <CodeBlock
+    title="config.json"
+    language="json"
+    code={`{ "agent_id": "example" }`}
+  />
+</Step>
+
+<StatsGrid
+  stats={[
+    { value: "100%", label: "Test Coverage" },
+    { value: "0", label: "Critical Issues" }
+  ]}
+/>
+```
+
+### Styling Guidelines
+
+All components respect Tailwind's dark mode and are fully responsive. You can add custom classes:
+
+```tsx
+<FeatureCard
+  className="hover:scale-105 transition-transform"
+  icon="⚡"
+  title="Custom Styled"
+  description="Add your own Tailwind classes"
+/>
+```
+
+### Accessibility
+
+Components follow accessibility best practices with proper ARIA labels, keyboard navigation, and semantic HTML. Screen readers will properly announce content in Alerts, Badges, and other interactive components.
