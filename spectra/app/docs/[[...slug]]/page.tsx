@@ -25,10 +25,9 @@ export default async function Page({ params }: PageProps) {
     <DocsPage
       toc={page.data.toc}
       full={page.data.full}
-      suppressHydrationWarning
     >
-      <DocsTitle suppressHydrationWarning>{page.data.title}</DocsTitle>
-      <DocsDescription className="mb-0" suppressHydrationWarning>
+      <DocsTitle>{page.data.title}</DocsTitle>
+      <DocsDescription className="mb-0">
         {page.data.description}
       </DocsDescription>
       <DocsBody>

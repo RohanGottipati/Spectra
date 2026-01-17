@@ -1,6 +1,8 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import Iridescence from "@/components/Iridescence";
 import ColorBends from "@/components/ColorBends";
 import Noise from "@/components/Noise";
@@ -18,6 +20,7 @@ import { BorderBeam } from "@/components/ui/border-beam";
 import DecryptedText from "@/components/DecryptedText";
 import { Particles } from "@/components/ui/particles";
 import CardNav, { CardNavItem } from "@/components/CardNav";
+import { createClient } from "@/lib/supabase/client";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
   Alert02Icon,
@@ -34,6 +37,7 @@ import {
   Time01Icon,
 } from "@hugeicons/core-free-icons";
 import type { IconSvgElement } from "@hugeicons/react";
+import type { Session } from "@supabase/supabase-js";
 
 // Alert items for the AnimatedList
 const alerts: { icon: IconSvgElement; title: string; description: string; time: string; color: string; iconColor: string }[] = [
@@ -126,6 +130,45 @@ const navItems: CardNavItem[] = [
 ];
 
 export default function Page() {
+  const router = useRouter();
+  const [session, setSession] = useState<Session | null>(null);
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getSession().then(({ data }) => setSession(data.session));
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession);
+    });
+    return () => authListener.subscription.unsubscribe();
+  }, []);
+
+  const handleLogout = async () => {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    router.push("/login");
+    router.refresh();
+  };
+
+  const navActions = session ? (
+    <>
+      <Link
+        href="/dashboard"
+        className="card-nav-cta-button"
+        style={{ backgroundColor: "#a5f3fc", color: "#0f172a" }}
+      >
+        Dashboard
+      </Link>
+      <button
+        type="button"
+        onClick={handleLogout}
+        className="card-nav-cta-button"
+        style={{ backgroundColor: "rgba(255, 255, 255, 0.12)", color: "#fff", border: "1px solid rgba(255, 255, 255, 0.2)" }}
+      >
+        Logout
+      </button>
+    </>
+  ) : null;
+
   return (
     <main className="relative">
       {/* Navbar */}
@@ -139,13 +182,14 @@ export default function Page() {
         buttonText="Login"
         buttonHref="/login"
         hideOnScroll={true}
+        actions={navActions}
       />
 
       {/* Hero Section */}
       <section className="relative min-h-screen w-full overflow-hidden">
         <div className="absolute inset-0 w-full h-full">
           <Iridescence
-            color={[0.18, 0.78, 0.82]}
+            color={[0.03, 0.52, 0.68]}
             speed={0.12}
             amplitude={0.05}
             mouseReact={true}

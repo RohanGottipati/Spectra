@@ -1,28 +1,33 @@
-import { ReactNode, Children, isValidElement, cloneElement } from "react";
+import { ReactNode, Children, isValidElement, cloneElement, ReactElement, HTMLAttributes } from "react";
 
 interface ComparisonTableProps {
   children: ReactNode;
 }
 
+type HTMLElementProps = HTMLAttributes<HTMLElement> & { children?: ReactNode };
+
 export function ComparisonTable({ children }: ComparisonTableProps) {
   // Process children to add styling classes
   const processedChildren = Children.map(children, (child) => {
     if (!isValidElement(child)) return child;
+    const typedChild = child as ReactElement<HTMLElementProps>;
 
     // Handle thead
-    if (child.type === "thead") {
-      const theadChildren = Children.map(child.props.children, (tr) => {
+    if (typedChild.type === "thead") {
+      const theadChildren = Children.map(typedChild.props.children, (tr) => {
         if (!isValidElement(tr) || tr.type !== "tr") return tr;
+        const typedTr = tr as ReactElement<HTMLElementProps>;
 
-        const trChildren = Children.map(tr.props.children, (th) => {
+        const trChildren = Children.map(typedTr.props.children, (th) => {
           if (!isValidElement(th)) return th;
-          return cloneElement(th, {
+          const typedTh = th as ReactElement<HTMLElementProps>;
+          return cloneElement(typedTh, {
             className: "px-4 py-3 text-left font-semibold bg-muted/50",
           });
         });
 
         return cloneElement(
-          tr,
+          typedTr,
           {
             className: "border-b border-border",
           },
@@ -30,23 +35,25 @@ export function ComparisonTable({ children }: ComparisonTableProps) {
         );
       });
 
-      return cloneElement(child, {}, theadChildren);
+      return cloneElement(typedChild, {}, theadChildren);
     }
 
     // Handle tbody
-    if (child.type === "tbody") {
-      const tbodyChildren = Children.map(child.props.children, (tr) => {
+    if (typedChild.type === "tbody") {
+      const tbodyChildren = Children.map(typedChild.props.children, (tr) => {
         if (!isValidElement(tr) || tr.type !== "tr") return tr;
+        const typedTr = tr as ReactElement<HTMLElementProps>;
 
-        const trChildren = Children.map(tr.props.children, (td) => {
+        const trChildren = Children.map(typedTr.props.children, (td) => {
           if (!isValidElement(td)) return td;
-          return cloneElement(td, {
+          const typedTd = td as ReactElement<HTMLElementProps>;
+          return cloneElement(typedTd, {
             className: "px-4 py-3 text-sm",
           });
         });
 
         return cloneElement(
-          tr,
+          typedTr,
           {
             className:
               "border-b border-border hover:bg-muted/50 transition-colors",
@@ -55,7 +62,7 @@ export function ComparisonTable({ children }: ComparisonTableProps) {
         );
       });
 
-      return cloneElement(child, {}, tbodyChildren);
+      return cloneElement(typedChild, {}, tbodyChildren);
     }
 
     return child;
