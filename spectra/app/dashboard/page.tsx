@@ -1469,9 +1469,17 @@ export default function DashboardPage() {
         <div className="absolute top-1/2 left-1/4 h-[300px] w-[300px] rounded-full bg-cyan-500/10 blur-[80px]" />
       </div>
 
-      <div className="relative w-full min-h-[80px]">
-        <FloatingHeader />
-      </div>
+      <CardNav
+        logoText="spectra"
+        items={navItems}
+        baseColor="rgba(0, 0, 0, 0.6)"
+        menuColor="#fff"
+        buttonBgColor="#a5f3fc"
+        buttonTextColor="#0f172a"
+        showButton={true}
+        hideOnScroll={false}
+        actions={navActions}
+      />
 
       <main className="relative z-10 max-w-5xl mx-auto px-6 pb-6 pt-24 sm:pt-28 space-y-5">
         {/* Top bar with stats and controls */}
