@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { FloatingHeader } from "@/components/ui/floating-header";
+import { useRequireAuth } from "@/lib/auth";
 import {
   Card,
   CardAction,
@@ -375,6 +377,7 @@ function buildTradeInput(overrides: Partial<TradeInput> = {}): TradeInput {
 }
 
 export default function DashboardPage() {
+  const { user, loading } = useRequireAuth();
   const [trades, setTrades] = useState<Trade[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const [intervalId, setIntervalId] = useState<NodeJS.Timeout | null>(null);
@@ -846,21 +849,29 @@ export default function DashboardPage() {
       setSelectedTradeId(trades[0]?.id ?? null);
     }
   }, [maxTime, minTime, selectedTrade, trades]);
+
+  // Show loading state while checking auth (after all hooks)
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin h-8 w-8 border-4 border-slate-300 border-t-slate-900 rounded-full mx-auto mb-4"></div>
+          <p className="text-slate-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // If not authenticated, useRequireAuth will redirect to login
+  if (!user) {
+    return null;
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100">
-      <header className="border-b bg-white/70 backdrop-blur">
-        <div className="max-w-6xl mx-auto flex items-center justify-between px-6 py-4">
-          <Link href="/" className="font-semibold">
-            spectra
-          </Link>
-          <Link
-            href="/"
-            className="text-sm text-muted-foreground hover:text-foreground"
-          >
-            Sign out
-          </Link>
-        </div>
-      </header>
+      <div className="relative w-full px-4 pt-4">
+        <FloatingHeader />
+      </div>
 
       <main className="max-w-6xl mx-auto px-6 py-8 space-y-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
