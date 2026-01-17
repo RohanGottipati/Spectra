@@ -290,7 +290,30 @@ const CardNav: React.FC<CardNavProps> = ({
               key={`${item.label}-${idx}`}
               className="nav-card"
               ref={setCardRef(idx)}
-              style={{ backgroundColor: item.bgColor, color: item.textColor }}
+              style={{
+                backgroundColor: item.bgColor,
+                color: item.textColor,
+                backgroundImage:
+                  item.label === 'Product'
+                    ? "url('/bf.png')"
+                    : item.label === 'Developers'
+                      ? "url('/ws.png')"
+                      : item.label === 'Resources'
+                        ? "url('/p.png')"
+                        : undefined,
+                backgroundSize:
+                  item.label === 'Product' ||
+                  item.label === 'Developers' ||
+                  item.label === 'Resources'
+                    ? 'cover'
+                    : undefined,
+                backgroundPosition:
+                  item.label === 'Product' ||
+                  item.label === 'Developers' ||
+                  item.label === 'Resources'
+                    ? 'center'
+                    : undefined,
+              }}
             >
               <div className="nav-card-label">{item.label}</div>
               <div className="nav-card-links">
