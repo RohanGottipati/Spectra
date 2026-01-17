@@ -93,7 +93,6 @@ export default function WaitlistPage() {
       {/* Footer (copied exactly from main page) */}
       <footer className="py-8 bg-slate-900 border-t border-white/10">
         <div className="max-w-7xl mx-auto px-6 md:px-12 flex flex-col md:flex-row justify-between items-center gap-4">
-          <p className="text-sm text-white/40">spectra</p>
           <p className="text-sm text-white/40">Built for UOttaHack 8 × <span style={{ fontFamily: "'Orbitron', sans-serif" }}>Solana</span></p>
           <div className="flex items-center gap-2 text-white/40">
             <span className="text-lg">◎</span>

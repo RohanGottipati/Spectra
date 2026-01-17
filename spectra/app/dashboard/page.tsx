@@ -888,7 +888,7 @@ export default function DashboardPage() {
         <div className="absolute top-1/3 left-1/2 -translate-x-1/2 h-[400px] w-[700px] rounded-full bg-gradient-to-r from-emerald-200/40 via-teal-100/30 to-cyan-200/40 blur-3xl" />
       </div>
 
-      <div className="relative w-full px-4 pt-4">
+      <div className="relative w-full min-h-[80px]">
         <FloatingHeader />
       </div>
 
