@@ -164,12 +164,12 @@ const ElectricBorder = ({
     const frequency = 10;
     const baseFlatness = 0;
     const displacement = 60;
-    const borderOffset = 60;
+    const borderOffset = 0;
 
     const updateSize = () => {
       const rect = container.getBoundingClientRect();
-      const width = rect.width + borderOffset * 2;
-      const height = rect.height + borderOffset * 2;
+      const width = rect.width;
+      const height = rect.height;
 
       // Use device pixel ratio for sharp rendering
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -203,10 +203,10 @@ const ElectricBorder = ({
       ctx.lineJoin = 'round';
 
       const scale = displacement;
-      const left = borderOffset;
-      const top = borderOffset;
-      const borderWidth = width - 2 * borderOffset;
-      const borderHeight = height - 2 * borderOffset;
+      const left = 0;
+      const top = 0;
+      const borderWidth = width;
+      const borderHeight = height;
       const maxRadius = Math.min(borderWidth, borderHeight) / 2;
       const radius = Math.min(borderRadius, maxRadius);
 
