@@ -48,6 +48,20 @@ interface AgentConfig {
   maxFrequencyPerMin?: number;
   allowedStrategies?: string[];
   description?: string;
+  // Database config fields
+  strategy?: string;
+  min_confidence?: number;
+  risk_tolerance?: string;
+  max_position_usd?: number;
+  preferred_tokens?: string[];
+}
+
+interface DbAgentConfig {
+  strategy?: string;
+  min_confidence?: number;
+  risk_tolerance?: string;
+  max_position_usd?: number;
+  preferred_tokens?: string[];
 }
 
 interface TradeInput {
@@ -111,7 +125,9 @@ interface DbAgent {
   wallet_address: string;
   personality: string;
   color: string;
-  config: Record<string, unknown>;
+  config: DbAgentConfig;
+  created_at: string;
+  updated_at: string;
 }
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
@@ -411,6 +427,13 @@ export default function DashboardPage() {
     beta: {},
     gamma: {},
   });
+  // Database agent configs (live from Supabase)
+  const [dbAgents, setDbAgents] = useState<Record<AgentId, DbAgent | null>>({
+    alpha: null,
+    beta: null,
+    gamma: null,
+  });
+  const [isSavingConfig, setIsSavingConfig] = useState(false);
   const [selectedAgentForConfig, setSelectedAgentForConfig] =
     useState<AgentId>("alpha");
   const [formConfig, setFormConfig] = useState<AgentConfig>({
@@ -494,21 +517,77 @@ export default function DashboardPage() {
     reader.readAsText(file);
   };
 
-  const handleApplyConfig = () => {
-    setAgentConfigs((prev) => ({
-      ...prev,
-      [selectedAgentForConfig]: formConfig,
-    }));
-    alert(`Config applied to ${selectedAgentForConfig}`);
-    setFormConfig({
-      maxPositionSize: undefined,
-      maxDailyLoss: undefined,
-      preferredTokens: undefined,
-      riskTolerance: undefined,
-      maxFrequencyPerMin: undefined,
-      allowedStrategies: undefined,
-      description: undefined,
-    });
+  const handleApplyConfig = async () => {
+    setIsSavingConfig(true);
+
+    try {
+      const supabase = supabaseRef.current;
+
+      // Build the new config object for the database
+      const newConfig: DbAgentConfig = {
+        ...(dbAgents[selectedAgentForConfig]?.config || {}),
+      };
+
+      // Map form fields to database config fields
+      if (formConfig.maxPositionSize !== undefined) {
+        newConfig.max_position_usd = formConfig.maxPositionSize;
+      }
+      if (formConfig.preferredTokens !== undefined) {
+        newConfig.preferred_tokens = formConfig.preferredTokens;
+      }
+      if (formConfig.riskTolerance !== undefined) {
+        // Map UI risk tolerance to database format
+        const riskMap: Record<string, string> = {
+          conservative: "low",
+          moderate: "medium",
+          aggressive: "high",
+        };
+        newConfig.risk_tolerance = riskMap[formConfig.riskTolerance] || formConfig.riskTolerance;
+      }
+      if (formConfig.maxFrequencyPerMin !== undefined) {
+        newConfig.min_confidence = Math.max(50, 100 - formConfig.maxFrequencyPerMin * 5);
+      }
+      if (formConfig.allowedStrategies?.length) {
+        newConfig.strategy = formConfig.allowedStrategies[0];
+      }
+
+      const { error } = await supabase
+        .from("agents")
+        .update({
+          config: newConfig,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", selectedAgentForConfig);
+
+      if (error) {
+        console.error("Error updating agent config:", error);
+        alert(`Error saving config: ${error.message}`);
+        return;
+      }
+
+      // Update local state as well
+      setAgentConfigs((prev) => ({
+        ...prev,
+        [selectedAgentForConfig]: formConfig,
+      }));
+
+      // Reset form
+      setFormConfig({
+        maxPositionSize: undefined,
+        maxDailyLoss: undefined,
+        preferredTokens: undefined,
+        riskTolerance: undefined,
+        maxFrequencyPerMin: undefined,
+        allowedStrategies: undefined,
+        description: undefined,
+      });
+
+    } catch (err) {
+      console.error("Error applying config:", err);
+      alert("Failed to save config");
+    } finally {
+      setIsSavingConfig(false);
+    }
   };
 
   const downloadConfigTemplate = () => {
@@ -534,6 +613,28 @@ export default function DashboardPage() {
   useEffect(() => {
     tradesPerAgentRef.current = tradesPerAgent;
   }, [tradesPerAgent]);
+
+  // Pre-fill form with current config when selected agent changes
+  useEffect(() => {
+    const agentData = dbAgents[selectedAgentForConfig];
+    if (agentData?.config) {
+      const cfg = agentData.config;
+      const riskMap: Record<string, "conservative" | "moderate" | "aggressive"> = {
+        low: "conservative",
+        medium: "moderate",
+        high: "aggressive",
+      };
+      setFormConfig({
+        maxPositionSize: cfg.max_position_usd,
+        preferredTokens: cfg.preferred_tokens,
+        riskTolerance: cfg.risk_tolerance ? riskMap[cfg.risk_tolerance] : undefined,
+        allowedStrategies: cfg.strategy ? [cfg.strategy] : undefined,
+        maxDailyLoss: undefined,
+        maxFrequencyPerMin: cfg.min_confidence ? Math.round((100 - cfg.min_confidence) / 5) : undefined,
+        description: undefined,
+      });
+    }
+  }, [selectedAgentForConfig, dbAgents]);
 
   useEffect(() => {
     const element = chartWrapRef.current;
@@ -619,6 +720,64 @@ export default function DashboardPage() {
       supabase.removeChannel(channel);
     };
   }, [useRealData]);
+
+  // Fetch agent configs from database and subscribe to updates
+  useEffect(() => {
+    const supabase = supabaseRef.current;
+
+    const fetchAgents = async () => {
+      const { data, error } = await supabase
+        .from("agents")
+        .select("*");
+
+      if (error) {
+        console.error("Error fetching agents:", error);
+        return;
+      }
+
+      if (data) {
+        const agentsMap: Record<AgentId, DbAgent | null> = {
+          alpha: null,
+          beta: null,
+          gamma: null,
+        };
+        for (const agent of data as DbAgent[]) {
+          if (agent.id === "alpha" || agent.id === "beta" || agent.id === "gamma") {
+            agentsMap[agent.id] = agent;
+          }
+        }
+        setDbAgents(agentsMap);
+      }
+    };
+
+    fetchAgents();
+
+    // Subscribe to agent config updates
+    const channel = supabase
+      .channel("agents-realtime")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "agents",
+        },
+        (payload) => {
+          const agent = payload.new as DbAgent;
+          if (agent && (agent.id === "alpha" || agent.id === "beta" || agent.id === "gamma")) {
+            setDbAgents((prev) => ({
+              ...prev,
+              [agent.id]: agent,
+            }));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   // Function to trigger all agents
   const triggerAgents = async () => {
@@ -1105,13 +1264,14 @@ export default function DashboardPage() {
                   </div>
                   <div className="flex gap-2 pt-2">
                     <Button
-                      onClick={() => {
-                        handleApplyConfig();
+                      onClick={async () => {
+                        await handleApplyConfig();
                         setIsConfigOpen(false);
                       }}
                       className="flex-1"
+                      disabled={isSavingConfig}
                     >
-                      Apply
+                      {isSavingConfig ? "Saving..." : "Apply"}
                     </Button>
                     <Button onClick={downloadConfigTemplate} variant="outline" className="flex-1">
                       Template
@@ -1411,80 +1571,97 @@ export default function DashboardPage() {
                   <thead>
                     <tr className="text-left text-slate-500 border-b border-slate-100/80">
                       <th className="pb-2.5 pr-4 font-bold text-slate-600 tracking-wide uppercase text-[10px]">Agent</th>
+                      <th className="pb-2.5 pr-4 font-bold text-slate-600 tracking-wide uppercase text-[10px]">Strategy</th>
+                      <th className="pb-2.5 pr-4 font-bold text-slate-600 tracking-wide uppercase text-[10px]">Max Position</th>
+                      <th className="pb-2.5 pr-4 font-bold text-slate-600 tracking-wide uppercase text-[10px]">Risk Level</th>
+                      <th className="pb-2.5 pr-4 font-bold text-slate-600 tracking-wide uppercase text-[10px]">Tokens</th>
+                      <th className="pb-2.5 pr-4 font-bold text-slate-600 tracking-wide uppercase text-[10px]">Min Conf.</th>
                       <th className="pb-2.5 pr-4 font-bold text-slate-600 tracking-wide uppercase text-[10px]">Trades</th>
-                      <th className="pb-2.5 pr-4 font-bold text-slate-600 tracking-wide uppercase text-[10px]">Avg Size</th>
-                      <th className="pb-2.5 pr-4 font-bold text-slate-600 tracking-wide uppercase text-[10px]">Avg Risk</th>
-                      <th className="pb-2.5 pr-4 font-bold text-slate-600 tracking-wide uppercase text-[10px]">Confidence</th>
-                      <th className="pb-2.5 pr-4 font-bold text-slate-600 tracking-wide uppercase text-[10px]">Bad</th>
                       <th className="pb-2.5 pr-4 font-bold text-slate-600 tracking-wide uppercase text-[10px]">Behavior</th>
                       <th className="pb-2.5 font-bold text-slate-600 tracking-wide uppercase text-[10px]">Last Seen</th>
                     </tr>
                   </thead>
                   <tbody className="text-slate-700">
-                    {agentStats.map((stat, idx) => (
-                      <tr
-                        key={stat.id}
-                        className={`border-b border-slate-50/80 last:border-0 transition-colors hover:bg-slate-50/50 ${idx % 2 === 0 ? 'bg-slate-25/30' : ''}`}
-                      >
-                        <td className="py-3 pr-4">
-                          <div className="flex items-center gap-2">
-                            <span className={`h-2.5 w-2.5 rounded-full ${stat.dot} shadow-sm`} />
-                            <span className="font-bold text-slate-900">{stat.name}</span>
-                            <span className="text-[10px] text-slate-400 font-medium">{stat.role}</span>
-                          </div>
-                        </td>
-                        <td className="py-3 pr-4">
-                          <span className="font-semibold text-slate-800">{stat.totalTrades}</span>
-                        </td>
-                        <td className="py-3 pr-4">
-                          <span className="font-mono font-semibold text-slate-800">${formatNumber(stat.avgAmount, 0)}</span>
-                        </td>
-                        <td className="py-3 pr-4">
-                          <div className="flex items-center gap-1.5">
-                            <div className="w-12 h-1.5 rounded-full bg-slate-100 overflow-hidden">
-                              <div
-                                className={`h-full rounded-full transition-all ${
-                                  stat.avgRisk >= 70 ? 'bg-gradient-to-r from-red-400 to-red-500' :
-                                  stat.avgRisk >= 45 ? 'bg-gradient-to-r from-amber-400 to-orange-400' :
-                                  'bg-gradient-to-r from-emerald-400 to-green-400'
-                                }`}
-                                style={{ width: `${stat.avgRisk}%` }}
-                              />
+                    {agentStats.map((stat, idx) => {
+                      const agentConfig = dbAgents[stat.id]?.config;
+                      const riskLevelDisplay: Record<string, { label: string; color: string }> = {
+                        low: { label: "Low", color: "text-emerald-600 bg-emerald-50 border-emerald-200" },
+                        medium: { label: "Medium", color: "text-amber-600 bg-amber-50 border-amber-200" },
+                        high: { label: "High", color: "text-red-600 bg-red-50 border-red-200" },
+                      };
+                      const riskLevel = riskLevelDisplay[agentConfig?.risk_tolerance || "medium"] || riskLevelDisplay.medium;
+
+                      return (
+                        <tr
+                          key={stat.id}
+                          className={`border-b border-slate-50/80 last:border-0 transition-colors hover:bg-slate-50/50 ${idx % 2 === 0 ? 'bg-slate-25/30' : ''}`}
+                        >
+                          <td className="py-3 pr-4">
+                            <div className="flex items-center gap-2">
+                              <span className={`h-2.5 w-2.5 rounded-full ${stat.dot} shadow-sm`} />
+                              <span className="font-bold text-slate-900">{stat.name}</span>
+                              <span className="text-[10px] text-slate-400 font-medium">{stat.role}</span>
                             </div>
-                            <span className="font-mono font-semibold text-slate-800">{formatNumber(stat.avgRisk, 1)}</span>
-                          </div>
-                        </td>
-                        <td className="py-3 pr-4">
-                          <div className="flex items-center gap-1.5">
-                            <div className="w-10 h-1.5 rounded-full bg-slate-100 overflow-hidden">
-                              <div
-                                className="h-full rounded-full bg-gradient-to-r from-sky-400 to-blue-400"
-                                style={{ width: `${stat.avgConfidence * 100}%` }}
-                              />
-                            </div>
-                            <span className="font-mono font-semibold text-slate-800">{formatNumber(stat.avgConfidence * 100, 0)}%</span>
-                          </div>
-                        </td>
-                        <td className="py-3 pr-4">
-                          {stat.badTrades > 0 ? (
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-red-50 border border-red-200/60">
-                              <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" />
-                              <span className="text-red-600 font-bold">{stat.badTrades}</span>
+                          </td>
+                          <td className="py-3 pr-4">
+                            <span className="px-2 py-0.5 rounded-full bg-slate-100 text-[10px] font-bold text-slate-700 capitalize">
+                              {agentConfig?.strategy || "—"}
                             </span>
-                          ) : (
-                            <span className="text-slate-400 font-medium">0</span>
-                          )}
-                        </td>
-                        <td className="py-3 pr-4">
-                          <Badge variant="outline" className={`text-[10px] font-bold ${behaviorBadgeClasses[stat.behavior as AgentBehavior]}`}>
-                            {behaviorLabels[stat.behavior as AgentBehavior]}
-                          </Badge>
-                        </td>
-                        <td className="py-3 font-mono text-slate-500" suppressHydrationWarning>
-                          {stat.lastSeen ? stat.lastSeen.toLocaleTimeString() : "—"}
-                        </td>
-                      </tr>
-                    ))}
+                          </td>
+                          <td className="py-3 pr-4">
+                            <span className="font-mono font-semibold text-slate-800">
+                              {agentConfig?.max_position_usd ? `$${formatNumber(agentConfig.max_position_usd, 0)}` : "—"}
+                            </span>
+                          </td>
+                          <td className="py-3 pr-4">
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${riskLevel.color}`}>
+                              {riskLevel.label}
+                            </span>
+                          </td>
+                          <td className="py-3 pr-4">
+                            <div className="flex flex-wrap gap-1 max-w-[120px]">
+                              {agentConfig?.preferred_tokens?.slice(0, 3).map((token: string) => (
+                                <span key={token} className="px-1.5 py-0.5 rounded bg-sky-50 border border-sky-200 text-[9px] font-bold text-sky-700">
+                                  {token}
+                                </span>
+                              ))}
+                              {(agentConfig?.preferred_tokens?.length || 0) > 3 && (
+                                <span className="px-1.5 py-0.5 rounded bg-slate-100 text-[9px] font-medium text-slate-500">
+                                  +{(agentConfig?.preferred_tokens?.length || 0) - 3}
+                                </span>
+                              )}
+                              {!agentConfig?.preferred_tokens?.length && (
+                                <span className="text-slate-400">—</span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="py-3 pr-4">
+                            <div className="flex items-center gap-1.5">
+                              <div className="w-10 h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                                <div
+                                  className="h-full rounded-full bg-gradient-to-r from-violet-400 to-purple-400"
+                                  style={{ width: `${agentConfig?.min_confidence || 0}%` }}
+                                />
+                              </div>
+                              <span className="font-mono font-semibold text-slate-800">
+                                {agentConfig?.min_confidence ? `${agentConfig.min_confidence}%` : "—"}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="py-3 pr-4">
+                            <span className="font-semibold text-slate-800">{stat.totalTrades}</span>
+                          </td>
+                          <td className="py-3 pr-4">
+                            <Badge variant="outline" className={`text-[10px] font-bold ${behaviorBadgeClasses[stat.behavior as AgentBehavior]}`}>
+                              {behaviorLabels[stat.behavior as AgentBehavior]}
+                            </Badge>
+                          </td>
+                          <td className="py-3 font-mono text-slate-500" suppressHydrationWarning>
+                            {stat.lastSeen ? stat.lastSeen.toLocaleTimeString() : "—"}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
