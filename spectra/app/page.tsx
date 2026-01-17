@@ -101,7 +101,7 @@ const navItems: CardNavItem[] = [
     links: [
       { label: "Features", href: "#features", ariaLabel: "View features" },
       { label: "Dashboard", href: "/dashboard", ariaLabel: "View dashboard" },
-      { label: "Demo", href: "#demo", ariaLabel: "View demo" },
+      { label: "Waitlist", href: "/waitlist", ariaLabel: "Join the waitlist" },
     ],
   },
   {

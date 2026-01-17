@@ -1,4 +1,5 @@
 import React, { useLayoutEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { gsap } from 'gsap';
 // use your own icon import if react-icons is not available
 import { GoArrowUpRight } from 'react-icons/go';
@@ -21,6 +22,7 @@ export interface CardNavProps {
   logo?: string;
   logoText?: string;
   logoAlt?: string;
+  logoHref?: string;
   items: CardNavItem[];
   className?: string;
   ease?: string;
@@ -36,6 +38,7 @@ const CardNav: React.FC<CardNavProps> = ({
   logo,
   logoText,
   logoAlt = 'Logo',
+  logoHref = '/',
   items,
   className = '',
   ease = 'power3.out',
@@ -188,13 +191,23 @@ const CardNav: React.FC<CardNavProps> = ({
             <div className="hamburger-line" />
           </div>
 
-          <div className="logo-container">
-            {logo ? (
-              <img src={logo} alt={logoAlt} className="logo" />
-            ) : (
-              <span className="logo-text" style={{ color: menuColor || '#000' }}>{logoText || 'Logo'}</span>
-            )}
-          </div>
+          {logoHref ? (
+            <Link href={logoHref} className="logo-container" aria-label="Home">
+              {logo ? (
+                <img src={logo} alt={logoAlt} className="logo" />
+              ) : (
+                <span className="logo-text" style={{ color: menuColor || '#000' }}>{logoText || 'Logo'}</span>
+              )}
+            </Link>
+          ) : (
+            <div className="logo-container">
+              {logo ? (
+                <img src={logo} alt={logoAlt} className="logo" />
+              ) : (
+                <span className="logo-text" style={{ color: menuColor || '#000' }}>{logoText || 'Logo'}</span>
+              )}
+            </div>
+          )}
 
           {buttonHref ? (
             <a
