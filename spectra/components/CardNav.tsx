@@ -37,6 +37,7 @@ export interface CardNavProps {
   buttonText?: string;
   buttonHref?: string;
   hideOnScroll?: boolean;
+  actions?: React.ReactNode;
 }
 
 const CardNav: React.FC<CardNavProps> = ({
@@ -53,7 +54,8 @@ const CardNav: React.FC<CardNavProps> = ({
   buttonTextColor,
   buttonText = 'Get Started',
   buttonHref,
-  hideOnScroll = false
+  hideOnScroll = false,
+  actions
 }) => {
   const { user, signOut } = useAuth();
   const router = useRouter();
@@ -255,45 +257,25 @@ const CardNav: React.FC<CardNavProps> = ({
             </div>
           )}
 
-          <div className="flex items-center gap-2">
-            {user ? (
-              <>
-                {logoHref === '/' && (
-                  <a
-                    href="/dashboard"
-                    className="card-nav-cta-button"
-                    style={{ backgroundColor: buttonBgColor, color: buttonTextColor }}
-                  >
-                    Dashboard
-                  </a>
-                )}
-                <button
-                  type="button"
-                  onClick={handleLogout}
-                  className="card-nav-cta-button"
-                  style={{ backgroundColor: buttonBgColor, color: buttonTextColor }}
-                >
-                  Logout
-                </button>
-              </>
+          <div className="card-nav-actions">
+            {actions ? (
+              actions
+            ) : buttonHref ? (
+              <a
+                href={buttonHref}
+                className="card-nav-cta-button"
+                style={{ backgroundColor: buttonBgColor, color: buttonTextColor }}
+              >
+                {buttonText}
+              </a>
             ) : (
-              buttonHref ? (
-                <a
-                  href={buttonHref}
-                  className="card-nav-cta-button"
-                  style={{ backgroundColor: buttonBgColor, color: buttonTextColor }}
-                >
-                  {buttonText}
-                </a>
-              ) : (
-                <button
-                  type="button"
-                  className="card-nav-cta-button"
-                  style={{ backgroundColor: buttonBgColor, color: buttonTextColor }}
-                >
-                  {buttonText}
-                </button>
-              )
+              <button
+                type="button"
+                className="card-nav-cta-button"
+                style={{ backgroundColor: buttonBgColor, color: buttonTextColor }}
+              >
+                {buttonText}
+              </button>
             )}
           </div>
         </div>
