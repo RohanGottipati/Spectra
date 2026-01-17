@@ -1,13 +1,14 @@
 import { source } from "@/lib/source";
 import { DocsLayout } from "fumadocs-ui/layouts/docs";
+import { RootProvider } from "fumadocs-ui/provider";
 import { baseOptions } from "@/lib/layout.shared";
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   return (
-    <div suppressHydrationWarning>
+    <RootProvider>
       <DocsLayout tree={source.getPageTree()} {...baseOptions()}>
         {children}
       </DocsLayout>
-    </div>
+    </RootProvider>
   );
 }
