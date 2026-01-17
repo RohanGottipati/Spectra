@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -26,6 +27,16 @@ type AgentId = "alpha" | "beta" | "gamma";
 type TradeAction = "buy" | "sell" | "swap";
 type TradeBehavior = "conservative" | "aggressive" | "anomalous" | "rogue";
 type AgentBehavior = TradeBehavior | "dormant";
+
+interface AgentConfig {
+  maxPositionSize?: number;
+  maxDailyLoss?: number;
+  preferredTokens?: string[];
+  riskTolerance?: "conservative" | "moderate" | "aggressive";
+  maxFrequencyPerMin?: number;
+  allowedStrategies?: string[];
+  description?: string;
+}
 
 interface TradeInput {
   id: string;
@@ -62,10 +73,34 @@ interface Baseline {
   freqPerMin: number;
 }
 
-const AGENTS: { id: AgentId; name: string; role: string; color: string; dot: string }[] = [
-  { id: "alpha", name: "Alpha", role: "Arb desk", color: "#0ea5e9", dot: "bg-sky-500" },
-  { id: "beta", name: "Beta", role: "Momentum", color: "#22c55e", dot: "bg-emerald-500" },
-  { id: "gamma", name: "Gamma", role: "Liquidity", color: "#f97316", dot: "bg-orange-500" },
+const AGENTS: {
+  id: AgentId;
+  name: string;
+  role: string;
+  color: string;
+  dot: string;
+}[] = [
+  {
+    id: "alpha",
+    name: "Alpha",
+    role: "Arb desk",
+    color: "#0ea5e9",
+    dot: "bg-sky-500",
+  },
+  {
+    id: "beta",
+    name: "Beta",
+    role: "Momentum",
+    color: "#22c55e",
+    dot: "bg-emerald-500",
+  },
+  {
+    id: "gamma",
+    name: "Gamma",
+    role: "Liquidity",
+    color: "#f97316",
+    dot: "bg-orange-500",
+  },
 ];
 
 const ACTIONS: TradeAction[] = ["buy", "sell", "swap"];
@@ -163,7 +198,7 @@ function detectBadTrade(trade: TradeInput) {
 function computeBaseline(trades: Trade[]): Baseline {
   if (trades.length < 4) return { ...BASELINE };
   const sorted = [...trades].sort(
-    (a, b) => a.timestamp.getTime() - b.timestamp.getTime()
+    (a, b) => a.timestamp.getTime() - b.timestamp.getTime(),
   );
   const first = sorted[0].timestamp.getTime();
   const last = sorted[sorted.length - 1].timestamp.getTime();
@@ -186,18 +221,37 @@ function buildWindow(trades: TradeInput[]): TradeWindow {
     trades.filter((trade) => trade.action === "sell").length / tradeCount;
   return { tradeCount, avgAmount, avgImpact, sellRatio };
 }
-function computeBehavior(trade: TradeInput, history: Trade[], badFlag: { isBadTrade: boolean; badReason?: string }) {
+function computeBehavior(
+  trade: TradeInput,
+  history: Trade[],
+  badFlag: { isBadTrade: boolean; badReason?: string },
+) {
   const baseline = computeBaseline(history);
   const windowStart = trade.timestamp.getTime() - WINDOW_MS;
-  const recent = [...history.filter((item) => item.timestamp.getTime() >= windowStart), trade];
+  const recent = [
+    ...history.filter((item) => item.timestamp.getTime() >= windowStart),
+    trade,
+  ];
   const window = buildWindow(recent);
   const freqPerMin = recent.length / (WINDOW_MS / 60000);
   const freqScore = clamp((freqPerMin / baseline.freqPerMin) * 30, 0, 40);
-  const amountScore = clamp((window.avgAmount / baseline.avgAmount) * 30, 0, 35);
-  const impactScore = clamp((window.avgImpact / baseline.avgImpact) * 20, 0, 25);
+  const amountScore = clamp(
+    (window.avgAmount / baseline.avgAmount) * 30,
+    0,
+    35,
+  );
+  const impactScore = clamp(
+    (window.avgImpact / baseline.avgImpact) * 20,
+    0,
+    25,
+  );
   const sellScore = window.sellRatio > 0.65 ? 8 : 0;
   const badScore = badFlag.isBadTrade ? 15 : 0;
-  const riskScore = clamp(Math.round(freqScore + amountScore + impactScore + sellScore + badScore), 0, 100);
+  const riskScore = clamp(
+    Math.round(freqScore + amountScore + impactScore + sellScore + badScore),
+    0,
+    100,
+  );
   const behavior = scoreToBehavior(riskScore);
 
   const reasons: string[] = [];
@@ -216,7 +270,9 @@ function computeBehavior(trade: TradeInput, history: Trade[], badFlag: { isBadTr
   if (badFlag.isBadTrade && badFlag.badReason) {
     reasons.push(`Bad trade: ${badFlag.badReason}`);
   }
-  const behaviorReason = reasons.length ? reasons.join("; ") : "Within baseline range";
+  const behaviorReason = reasons.length
+    ? reasons.join("; ")
+    : "Within baseline range";
 
   return { riskScore, behavior, behaviorReason, window };
 }
@@ -244,11 +300,9 @@ function buildTradeInput(overrides: Partial<TradeInput> = {}): TradeInput {
     decision: overrides.decision ?? decisionTemplate.replace("{token}", token),
     strategy: overrides.strategy ?? pickOne(STRATEGIES),
     confidence:
-      overrides.confidence ??
-      Number((0.55 + Math.random() * 0.43).toFixed(2)),
+      overrides.confidence ?? Number((0.55 + Math.random() * 0.43).toFixed(2)),
     priceImpact:
-      overrides.priceImpact ??
-      Number((0.3 + Math.random() * 5.3).toFixed(2)),
+      overrides.priceImpact ?? Number((0.3 + Math.random() * 5.3).toFixed(2)),
   };
 }
 
@@ -267,6 +321,24 @@ export default function DashboardPage() {
   const [action, setAction] = useState<TradeAction>("buy");
   const [token, setToken] = useState("SOL");
   const [amount, setAmount] = useState("");
+  const [agentConfigs, setAgentConfigs] = useState<
+    Record<AgentId, AgentConfig>
+  >({
+    alpha: {},
+    beta: {},
+    gamma: {},
+  });
+  const [selectedAgentForConfig, setSelectedAgentForConfig] =
+    useState<AgentId>("alpha");
+  const [formConfig, setFormConfig] = useState<AgentConfig>({
+    maxPositionSize: undefined,
+    maxDailyLoss: undefined,
+    preferredTokens: undefined,
+    riskTolerance: undefined,
+    maxFrequencyPerMin: undefined,
+    allowedStrategies: undefined,
+    description: undefined,
+  });
 
   const addTrades = useCallback((inputs: TradeInput[]) => {
     setTrades((prev) => {
@@ -284,7 +356,7 @@ export default function DashboardPage() {
     (input: TradeInput) => {
       addTrades([input]);
     },
-    [addTrades]
+    [addTrades],
   );
 
   const toggleSimulation = () => {
@@ -319,7 +391,7 @@ export default function DashboardPage() {
         amount: Math.round(9500 + Math.random() * 3000),
         priceImpact: Number((4.6 + Math.random() * 1.2).toFixed(2)),
         confidence: Number((0.45 + Math.random() * 0.08).toFixed(2)),
-      })
+      }),
     );
   };
 
@@ -333,9 +405,62 @@ export default function DashboardPage() {
         action,
         token,
         amount: numericAmount,
-      })
+      }),
     );
     setAmount("");
+  };
+
+  const handleConfigUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const content = e.target?.result as string;
+        const parsed: AgentConfig = JSON.parse(content);
+        setFormConfig(parsed);
+      } catch (error) {
+        alert("Invalid JSON file");
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleApplyConfig = () => {
+    setAgentConfigs((prev) => ({
+      ...prev,
+      [selectedAgentForConfig]: formConfig,
+    }));
+    alert(`Config applied to ${selectedAgentForConfig}`);
+    setFormConfig({
+      maxPositionSize: undefined,
+      maxDailyLoss: undefined,
+      preferredTokens: undefined,
+      riskTolerance: undefined,
+      maxFrequencyPerMin: undefined,
+      allowedStrategies: undefined,
+      description: undefined,
+    });
+  };
+
+  const downloadConfigTemplate = () => {
+    const template: AgentConfig = {
+      maxPositionSize: 10000,
+      maxDailyLoss: 5000,
+      preferredTokens: ["SOL", "USDC"],
+      riskTolerance: "moderate",
+      maxFrequencyPerMin: 5,
+      allowedStrategies: ["momentum", "mean reversion"],
+      description: "Agent behavior configuration",
+    };
+    const dataStr = JSON.stringify(template, null, 2);
+    const dataBlob = new Blob([dataStr], { type: "application/json" });
+    const url = URL.createObjectURL(dataBlob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `agent-config-${selectedAgentForConfig}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   useEffect(() => {
@@ -369,7 +494,10 @@ export default function DashboardPage() {
       setSelectedTradeId(null);
       return;
     }
-    if (!selectedTradeId || !trades.some((trade) => trade.id === selectedTradeId)) {
+    if (
+      !selectedTradeId ||
+      !trades.some((trade) => trade.id === selectedTradeId)
+    ) {
       setSelectedTradeId(trades[0].id);
     }
   }, [trades, selectedTradeId]);
@@ -377,7 +505,9 @@ export default function DashboardPage() {
   const now = Date.now();
 
   const agentMap = useMemo(() => {
-    return Object.fromEntries(AGENTS.map((agentMeta) => [agentMeta.id, agentMeta]));
+    return Object.fromEntries(
+      AGENTS.map((agentMeta) => [agentMeta.id, agentMeta]),
+    );
   }, []);
 
   const tradesByAgent = useMemo(() => {
@@ -410,8 +540,12 @@ export default function DashboardPage() {
       const badTrades = items.filter((trade) => trade.isBadTrade).length;
       const lastSeen = items[items.length - 1]?.timestamp;
       const isDormant = !lastSeen || now - lastSeen.getTime() > DORMANT_MS;
-      const recent = items.filter((trade) => trade.timestamp.getTime() >= now - WINDOW_MS);
-      const recentRisk = recent.length ? average(recent.map((trade) => trade.riskScore)) : avgRisk;
+      const recent = items.filter(
+        (trade) => trade.timestamp.getTime() >= now - WINDOW_MS,
+      );
+      const recentRisk = recent.length
+        ? average(recent.map((trade) => trade.riskScore))
+        : avgRisk;
       const behavior = isDormant ? "dormant" : scoreToBehavior(recentRisk);
       return {
         ...agentMeta,
@@ -427,39 +561,50 @@ export default function DashboardPage() {
   }, [now, tradesByAgent]);
 
   const recentTrades = trades.filter(
-    (trade) => trade.timestamp.getTime() >= now - WINDOW_MS
+    (trade) => trade.timestamp.getTime() >= now - WINDOW_MS,
   );
   const anomalyCount = recentTrades.filter(
-    (trade) => trade.behavior === "anomalous" || trade.behavior === "rogue"
+    (trade) => trade.behavior === "anomalous" || trade.behavior === "rogue",
   ).length;
   const badTradeCount = trades.filter((trade) => trade.isBadTrade).length;
   const avgRisk = average(trades.map((trade) => trade.riskScore));
-  const activeAgents = agentStats.filter((stat) => stat.behavior !== "dormant").length;
+  const activeAgents = agentStats.filter(
+    (stat) => stat.behavior !== "dormant",
+  ).length;
 
   const visibleWindowMs = useMemo(() => {
     if (trades.length < 6) return 6 * 60 * 1000;
     const sorted = [...trades].sort(
-      (a, b) => a.timestamp.getTime() - b.timestamp.getTime()
+      (a, b) => a.timestamp.getTime() - b.timestamp.getTime(),
     );
     const recent = sorted.slice(-12);
-    const span = recent[recent.length - 1].timestamp.getTime() - recent[0].timestamp.getTime();
+    const span =
+      recent[recent.length - 1].timestamp.getTime() -
+      recent[0].timestamp.getTime();
     return clamp(span * 1.15, 2 * 60 * 1000, 30 * 60 * 1000);
   }, [trades]);
   const chartTimes = trades.map((trade) => trade.timestamp.getTime());
   const latestTradeTime = chartTimes.length ? Math.max(...chartTimes) : now;
   const visibleTrades = trades.filter(
-    (trade) => trade.timestamp.getTime() >= latestTradeTime - visibleWindowMs
+    (trade) => trade.timestamp.getTime() >= latestTradeTime - visibleWindowMs,
   );
   const visibleTimes = visibleTrades.map((trade) => trade.timestamp.getTime());
   const minVisibleTime = visibleTimes.length
     ? Math.min(...visibleTimes)
     : latestTradeTime - visibleWindowMs;
-  const maxVisibleTime = visibleTimes.length ? Math.max(...visibleTimes) : latestTradeTime;
+  const maxVisibleTime = visibleTimes.length
+    ? Math.max(...visibleTimes)
+    : latestTradeTime;
   const useExactSpan = visibleTrades.length >= 2;
-  const minTime = useExactSpan ? minVisibleTime : maxVisibleTime - visibleWindowMs;
+  const minTime = useExactSpan
+    ? minVisibleTime
+    : maxVisibleTime - visibleWindowMs;
   const maxTime = maxVisibleTime;
   const span = Math.max(maxTime - minTime, 1);
-  const visibleWindowLabel = Math.max(Math.round((maxTime - minTime) / 60000), 1);
+  const visibleWindowLabel = Math.max(
+    Math.round((maxTime - minTime) / 60000),
+    1,
+  );
 
   const chartTradesByAgent = useMemo(() => {
     const grouped: Record<AgentId, Trade[]> = {
@@ -519,7 +664,10 @@ export default function DashboardPage() {
           <Link href="/" className="font-semibold">
             spectra
           </Link>
-          <Link href="/" className="text-sm text-muted-foreground hover:text-foreground">
+          <Link
+            href="/"
+            className="text-sm text-muted-foreground hover:text-foreground"
+          >
             Sign out
           </Link>
         </div>
@@ -528,9 +676,12 @@ export default function DashboardPage() {
       <main className="max-w-6xl mx-auto px-6 py-8 space-y-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h1 className="text-lg font-semibold">Behavior classification cockpit</h1>
+            <h1 className="text-lg font-semibold">
+              Behavior classification cockpit
+            </h1>
             <p className="text-sm text-muted-foreground">
-              Rolling metrics compare frequency, size, and price impact to each agent baseline.
+              Rolling metrics compare frequency, size, and price impact to each
+              agent baseline.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -570,28 +721,44 @@ export default function DashboardPage() {
             <CardContent className="pt-4">
               <p className="text-muted-foreground text-xs">Active agents</p>
               <p className="text-2xl font-semibold">{activeAgents}</p>
-              <p className="text-[11px] text-muted-foreground">Dormant: {AGENTS.length - activeAgents}</p>
+              <p className="text-[11px] text-muted-foreground">
+                Dormant: {AGENTS.length - activeAgents}
+              </p>
             </CardContent>
           </Card>
           <Card size="sm">
             <CardContent className="pt-4">
               <p className="text-muted-foreground text-xs">Avg risk score</p>
-              <p className="text-2xl font-semibold">{formatNumber(avgRisk, 1)}</p>
-              <p className="text-[11px] text-muted-foreground">Rolling 12m window</p>
+              <p className="text-2xl font-semibold">
+                {formatNumber(avgRisk, 1)}
+              </p>
+              <p className="text-[11px] text-muted-foreground">
+                Rolling 12m window
+              </p>
             </CardContent>
           </Card>
           <Card size="sm">
             <CardContent className="pt-4">
               <p className="text-muted-foreground text-xs">Recent anomalies</p>
-              <p className="text-2xl font-semibold text-red-600">{anomalyCount}</p>
-              <p className="text-[11px] text-muted-foreground">Anomalous or rogue points</p>
+              <p className="text-2xl font-semibold text-red-600">
+                {anomalyCount}
+              </p>
+              <p className="text-[11px] text-muted-foreground">
+                Anomalous or rogue points
+              </p>
             </CardContent>
           </Card>
           <Card size="sm">
             <CardContent className="pt-4">
-              <p className="text-muted-foreground text-xs">Bad trades flagged</p>
-              <p className="text-2xl font-semibold text-amber-600">{badTradeCount}</p>
-              <p className="text-[11px] text-muted-foreground">Objective trade rules</p>
+              <p className="text-muted-foreground text-xs">
+                Bad trades flagged
+              </p>
+              <p className="text-2xl font-semibold text-amber-600">
+                {badTradeCount}
+              </p>
+              <p className="text-[11px] text-muted-foreground">
+                Objective trade rules
+              </p>
             </CardContent>
           </Card>
         </div>
@@ -601,12 +768,13 @@ export default function DashboardPage() {
             <CardHeader>
               <CardTitle>Fleet behavior timeline</CardTitle>
               <CardDescription>
-                All agents plotted together. Click any point to inspect the decision and behavior.
+                All agents plotted together. Click any point to inspect the
+                decision and behavior.
               </CardDescription>
               <CardAction>
-                  <Badge variant="outline" className="text-xs">
-                    Auto zoom: {visibleWindowLabel}m
-                  </Badge>
+                <Badge variant="outline" className="text-xs">
+                  Auto zoom: {visibleWindowLabel}m
+                </Badge>
               </CardAction>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -616,7 +784,8 @@ export default function DashboardPage() {
                   <div ref={chartWrapRef} className="relative">
                     {trades.length === 0 ? (
                       <div className="flex h-64 items-center justify-center text-sm text-muted-foreground">
-                        No trades yet. Start the simulation or add a manual trade.
+                        No trades yet. Start the simulation or add a manual
+                        trade.
                       </div>
                     ) : (
                       <svg
@@ -663,25 +832,30 @@ export default function DashboardPage() {
                         )}
 
                         {AGENTS.map((agentMeta) => {
-                          const points = chartTradesByAgent[agentMeta.id].map((trade) => ({
-                            trade,
-                            x: getX(trade.timestamp.getTime()),
-                            y: getY(trade.riskScore),
-                          }));
+                          const points = chartTradesByAgent[agentMeta.id].map(
+                            (trade) => ({
+                              trade,
+                              x: getX(trade.timestamp.getTime()),
+                              y: getY(trade.riskScore),
+                            }),
+                          );
                           if (!points.length) return null;
-                          const linePoints = points.map((point) => `${point.x},${point.y}`).join(" ");
+                          const linePoints = points
+                            .map((point) => `${point.x},${point.y}`)
+                            .join(" ");
                           return (
                             <g key={agentMeta.id}>
-                            <polyline
-                              points={linePoints}
-                              fill="none"
-                              stroke={agentMeta.color}
-                              strokeWidth="2"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            />
+                              <polyline
+                                points={linePoints}
+                                fill="none"
+                                stroke={agentMeta.color}
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
                               {points.map((point) => {
-                                const isSelected = selectedTradeId === point.trade.id;
+                                const isSelected =
+                                  selectedTradeId === point.trade.id;
                                 const radius = point.trade.isBadTrade ? 5 : 4;
                                 return (
                                   <g key={point.trade.id}>
@@ -692,19 +866,36 @@ export default function DashboardPage() {
                                       fill="transparent"
                                       stroke="transparent"
                                       className="cursor-pointer"
-                                      onClick={() => setSelectedTradeId(point.trade.id)}
+                                      onClick={() =>
+                                        setSelectedTradeId(point.trade.id)
+                                      }
                                     />
                                     <circle
                                       cx={point.x}
                                       cy={point.y}
                                       r={isSelected ? radius + 2 : radius}
                                       fill={agentMeta.color}
-                                      stroke={isSelected ? "#0f172a" : point.trade.isBadTrade ? "#0f172a" : "transparent"}
-                                      strokeWidth={isSelected ? 2 : point.trade.isBadTrade ? 1.5 : 0}
+                                      stroke={
+                                        isSelected
+                                          ? "#0f172a"
+                                          : point.trade.isBadTrade
+                                            ? "#0f172a"
+                                            : "transparent"
+                                      }
+                                      strokeWidth={
+                                        isSelected
+                                          ? 2
+                                          : point.trade.isBadTrade
+                                            ? 1.5
+                                            : 0
+                                      }
                                       pointerEvents="none"
                                     >
                                       <title>
-                                        {agentMeta.name} {point.trade.action} {formatNumber(point.trade.amount)} {point.trade.token} - {behaviorLabels[point.trade.behavior]}
+                                        {agentMeta.name} {point.trade.action}{" "}
+                                        {formatNumber(point.trade.amount)}{" "}
+                                        {point.trade.token} -{" "}
+                                        {behaviorLabels[point.trade.behavior]}
                                       </title>
                                     </circle>
                                   </g>
@@ -727,9 +918,12 @@ export default function DashboardPage() {
                       >
                         <div className="flex items-center justify-between gap-2">
                           <div className="flex items-center gap-2">
-                            <span className={`h-2 w-2 rounded-full ${agentMap[selectedTrade.agent].dot}`} />
+                            <span
+                              className={`h-2 w-2 rounded-full ${agentMap[selectedTrade.agent].dot}`}
+                            />
                             <p className="text-xs font-semibold text-slate-900">
-                              {agentMap[selectedTrade.agent].name} {selectedTrade.action.toUpperCase()}
+                              {agentMap[selectedTrade.agent].name}{" "}
+                              {selectedTrade.action.toUpperCase()}
                             </p>
                           </div>
                           <Badge
@@ -740,12 +934,18 @@ export default function DashboardPage() {
                           </Badge>
                         </div>
                         <p className="mt-1 text-[11px] text-slate-600">
-                          {formatNumber(selectedTrade.amount)} {selectedTrade.token} - {selectedTrade.strategy}
+                          {formatNumber(selectedTrade.amount)}{" "}
+                          {selectedTrade.token} - {selectedTrade.strategy}
                         </p>
-                        <p className="mt-1 text-[11px] text-slate-500">{selectedTrade.decision}</p>
+                        <p className="mt-1 text-[11px] text-slate-500">
+                          {selectedTrade.decision}
+                        </p>
                         <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] text-slate-600">
                           <div>
-                            Risk <span className="font-semibold text-slate-900">{selectedTrade.riskScore}</span>
+                            Risk{" "}
+                            <span className="font-semibold text-slate-900">
+                              {selectedTrade.riskScore}
+                            </span>
                           </div>
                           <div>
                             Impact{" "}
@@ -766,20 +966,28 @@ export default function DashboardPage() {
                             </span>
                           </div>
                         </div>
-                        <p className="mt-2 text-[11px] text-slate-500">{selectedTrade.behaviorReason}</p>
-                        {selectedTrade.isBadTrade && selectedTrade.badReason && (
-                          <p className="mt-1 text-[11px] font-semibold text-rose-600">
-                            Bad trade: {selectedTrade.badReason}
-                          </p>
-                        )}
+                        <p className="mt-2 text-[11px] text-slate-500">
+                          {selectedTrade.behaviorReason}
+                        </p>
+                        {selectedTrade.isBadTrade &&
+                          selectedTrade.badReason && (
+                            <p className="mt-1 text-[11px] font-semibold text-rose-600">
+                              Bad trade: {selectedTrade.badReason}
+                            </p>
+                          )}
                         <span className="absolute left-1/2 top-full h-3 w-3 -translate-x-1/2 -translate-y-1/2 rotate-45 border-b border-r border-white/70 bg-white/80" />
                       </div>
                     )}
                   </div>
                   <div className="mt-3 flex flex-wrap gap-3 text-xs text-muted-foreground">
                     {AGENTS.map((agentMeta) => (
-                      <div key={agentMeta.id} className="flex items-center gap-2">
-                        <span className={`h-2 w-2 rounded-full ${agentMeta.dot}`} />
+                      <div
+                        key={agentMeta.id}
+                        className="flex items-center gap-2"
+                      >
+                        <span
+                          className={`h-2 w-2 rounded-full ${agentMeta.dot}`}
+                        />
                         <span>{agentMeta.name}</span>
                       </div>
                     ))}
@@ -798,45 +1006,66 @@ export default function DashboardPage() {
               <div className="grid md:grid-cols-2 gap-4">
                 <div className="rounded-lg border bg-white/70 p-4 space-y-3">
                   <div>
-                    <p className="text-xs text-muted-foreground">Classification signals</p>
-                    <p className="text-sm font-semibold">Over time, not one trade</p>
+                    <p className="text-xs text-muted-foreground">
+                      Classification signals
+                    </p>
+                    <p className="text-sm font-semibold">
+                      Over time, not one trade
+                    </p>
                   </div>
                   <div className="space-y-2 text-xs text-muted-foreground">
                     <div className="flex items-center justify-between">
                       <span>Frequency vs baseline</span>
-                      <span className="font-medium text-foreground">Rolling 12m</span>
+                      <span className="font-medium text-foreground">
+                        Rolling 12m
+                      </span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span>Position sizing drift</span>
-                      <span className="font-medium text-foreground">Avg notional</span>
+                      <span className="font-medium text-foreground">
+                        Avg notional
+                      </span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span>Price impact trend</span>
-                      <span className="font-medium text-foreground">Impact delta</span>
+                      <span className="font-medium text-foreground">
+                        Impact delta
+                      </span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span>Bad trade rules</span>
-                      <span className="font-medium text-foreground">Objective flags</span>
+                      <span className="font-medium text-foreground">
+                        Objective flags
+                      </span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span>Classification</span>
-                      <span className="font-medium text-foreground">Conservative to rogue</span>
+                      <span className="font-medium text-foreground">
+                        Conservative to rogue
+                      </span>
                     </div>
                   </div>
                   <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-muted-foreground">
-                    Spectra grades behavior over rolling windows to avoid punishing a single mistake.
+                    Spectra grades behavior over rolling windows to avoid
+                    punishing a single mistake.
                   </div>
                 </div>
 
                 <div className="rounded-lg border bg-white/70 p-4 space-y-3">
                   <div>
-                    <p className="text-xs text-muted-foreground">Adaptive timeline</p>
-                    <p className="text-sm font-semibold">Zooms with trading cadence</p>
+                    <p className="text-xs text-muted-foreground">
+                      Adaptive timeline
+                    </p>
+                    <p className="text-sm font-semibold">
+                      Zooms with trading cadence
+                    </p>
                   </div>
                   <div className="space-y-2 text-xs text-muted-foreground">
                     <div className="flex items-center justify-between">
                       <span>Visible window</span>
-                      <span className="font-medium text-foreground">{visibleWindowLabel}m</span>
+                      <span className="font-medium text-foreground">
+                        {visibleWindowLabel}m
+                      </span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span>Behavior window</span>
@@ -844,7 +1073,9 @@ export default function DashboardPage() {
                     </div>
                     <div className="flex items-center justify-between">
                       <span>Trades per agent</span>
-                      <span className="font-medium text-foreground">{tradesPerAgent} / tick</span>
+                      <span className="font-medium text-foreground">
+                        {tradesPerAgent} / tick
+                      </span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span>Tick interval</span>
@@ -852,7 +1083,8 @@ export default function DashboardPage() {
                     </div>
                   </div>
                   <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-muted-foreground">
-                    Click any point to open a tooltip anchored to the selected decision.
+                    Click any point to open a tooltip anchored to the selected
+                    decision.
                   </div>
                 </div>
               </div>
@@ -863,10 +1095,16 @@ export default function DashboardPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Manual trade</CardTitle>
-                <CardDescription>Send a specific trade for classification.</CardDescription>
+                <CardDescription>
+                  Send a specific trade for classification.
+                </CardDescription>
               </CardHeader>
               <CardContent>
-                <form onSubmit={submitTrade} className="space-y-3">
+                <form
+                  onSubmit={submitTrade}
+                  className="space-y-3"
+                  suppressHydrationWarning
+                >
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <Label className="text-xs">Agent</Label>
@@ -874,7 +1112,10 @@ export default function DashboardPage() {
                         value={agent}
                         onValueChange={(value) => setAgent(value as AgentId)}
                       >
-                        <SelectTrigger className="w-full mt-1">
+                        <SelectTrigger
+                          className="w-full mt-1"
+                          suppressHydrationWarning
+                        >
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -890,9 +1131,14 @@ export default function DashboardPage() {
                       <Label className="text-xs">Action</Label>
                       <Select
                         value={action}
-                        onValueChange={(value) => setAction(value as TradeAction)}
+                        onValueChange={(value) =>
+                          setAction(value as TradeAction)
+                        }
                       >
-                        <SelectTrigger className="w-full mt-1">
+                        <SelectTrigger
+                          className="w-full mt-1"
+                          suppressHydrationWarning
+                        >
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -908,8 +1154,14 @@ export default function DashboardPage() {
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <Label className="text-xs">Token</Label>
-                      <Select value={token} onValueChange={setToken}>
-                        <SelectTrigger className="w-full mt-1">
+                      <Select
+                        value={token}
+                        onValueChange={(value) => value && setToken(value)}
+                      >
+                        <SelectTrigger
+                          className="w-full mt-1"
+                          suppressHydrationWarning
+                        >
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -932,10 +1184,273 @@ export default function DashboardPage() {
                       />
                     </div>
                   </div>
-                  <Button type="submit" className="w-full">
+                  <Button
+                    type="submit"
+                    className="w-full"
+                    suppressHydrationWarning
+                  >
                     Submit trade
                   </Button>
                 </form>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Agent Config</CardTitle>
+                <CardDescription>
+                  Set behavior parameters for agents.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Agent Selection */}
+                <div>
+                  <Label className="text-xs mb-2 block">Select Agent</Label>
+                  <Select
+                    value={selectedAgentForConfig}
+                    onValueChange={(value) =>
+                      setSelectedAgentForConfig(value as AgentId)
+                    }
+                  >
+                    <SelectTrigger className="w-full" suppressHydrationWarning>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {AGENTS.map((agentMeta) => (
+                        <SelectItem key={agentMeta.id} value={agentMeta.id}>
+                          {agentMeta.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Current Config Display */}
+                {agentConfigs[selectedAgentForConfig] &&
+                  Object.keys(agentConfigs[selectedAgentForConfig]).length >
+                    0 && (
+                    <div className="rounded-md bg-slate-50 p-3 text-xs">
+                      <p className="font-semibold mb-2 text-foreground">
+                        Current Config:
+                      </p>
+                      <pre className="text-xs whitespace-pre-wrap break-words text-muted-foreground">
+                        {JSON.stringify(
+                          agentConfigs[selectedAgentForConfig],
+                          null,
+                          2,
+                        )}
+                      </pre>
+                    </div>
+                  )}
+
+                {/* Form Fields */}
+                <div className="space-y-3" suppressHydrationWarning>
+                  {/* Max Position Size */}
+                  <div>
+                    <Label className="text-xs mb-1 block">
+                      Max Position Size
+                    </Label>
+                    <Input
+                      type="number"
+                      placeholder="e.g., 10000"
+                      value={formConfig.maxPositionSize || ""}
+                      onChange={(e) =>
+                        setFormConfig((prev) => ({
+                          ...prev,
+                          maxPositionSize: e.target.value
+                            ? parseFloat(e.target.value)
+                            : undefined,
+                        }))
+                      }
+                      className="text-xs"
+                    />
+                  </div>
+
+                  {/* Max Daily Loss */}
+                  <div>
+                    <Label className="text-xs mb-1 block">Max Daily Loss</Label>
+                    <Input
+                      type="number"
+                      placeholder="e.g., 5000"
+                      value={formConfig.maxDailyLoss || ""}
+                      onChange={(e) =>
+                        setFormConfig((prev) => ({
+                          ...prev,
+                          maxDailyLoss: e.target.value
+                            ? parseFloat(e.target.value)
+                            : undefined,
+                        }))
+                      }
+                      className="text-xs"
+                    />
+                  </div>
+
+                  {/* Risk Tolerance */}
+                  <div>
+                    <Label className="text-xs mb-1 block">Risk Tolerance</Label>
+                    <Select
+                      value={formConfig.riskTolerance || ""}
+                      onValueChange={(value) =>
+                        setFormConfig((prev) => ({
+                          ...prev,
+                          riskTolerance: value as
+                            | "conservative"
+                            | "moderate"
+                            | "aggressive"
+                            | undefined,
+                        }))
+                      }
+                    >
+                      <SelectTrigger
+                        className="w-full text-xs"
+                        suppressHydrationWarning
+                      >
+                        <SelectValue placeholder="Select risk level" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="conservative">
+                          Conservative
+                        </SelectItem>
+                        <SelectItem value="moderate">Moderate</SelectItem>
+                        <SelectItem value="aggressive">Aggressive</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Max Frequency Per Minute */}
+                  <div>
+                    <Label className="text-xs mb-1 block">
+                      Max Frequency Per Minute
+                    </Label>
+                    <Input
+                      type="number"
+                      placeholder="e.g., 5"
+                      value={formConfig.maxFrequencyPerMin || ""}
+                      onChange={(e) =>
+                        setFormConfig((prev) => ({
+                          ...prev,
+                          maxFrequencyPerMin: e.target.value
+                            ? parseFloat(e.target.value)
+                            : undefined,
+                        }))
+                      }
+                      className="text-xs"
+                    />
+                  </div>
+
+                  {/* Preferred Tokens */}
+                  <div>
+                    <Label className="text-xs mb-1 block">
+                      Preferred Tokens (comma separated)
+                    </Label>
+                    <Input
+                      type="text"
+                      placeholder="e.g., SOL, USDC, JUP"
+                      value={
+                        formConfig.preferredTokens
+                          ? formConfig.preferredTokens.join(", ")
+                          : ""
+                      }
+                      onChange={(e) =>
+                        setFormConfig((prev) => ({
+                          ...prev,
+                          preferredTokens: e.target.value
+                            ? e.target.value.split(",").map((t) => t.trim())
+                            : undefined,
+                        }))
+                      }
+                      className="text-xs"
+                    />
+                  </div>
+
+                  {/* Allowed Strategies */}
+                  <div>
+                    <Label className="text-xs mb-1 block">
+                      Allowed Strategies (comma separated)
+                    </Label>
+                    <Input
+                      type="text"
+                      placeholder="e.g., momentum, mean reversion"
+                      value={
+                        formConfig.allowedStrategies
+                          ? formConfig.allowedStrategies.join(", ")
+                          : ""
+                      }
+                      onChange={(e) =>
+                        setFormConfig((prev) => ({
+                          ...prev,
+                          allowedStrategies: e.target.value
+                            ? e.target.value.split(",").map((s) => s.trim())
+                            : undefined,
+                        }))
+                      }
+                      className="text-xs"
+                    />
+                  </div>
+
+                  {/* Description */}
+                  <div>
+                    <Label className="text-xs mb-1 block">Description</Label>
+                    <Textarea
+                      placeholder="Brief description of this configuration"
+                      value={formConfig.description || ""}
+                      onChange={(e) =>
+                        setFormConfig((prev) => ({
+                          ...prev,
+                          description: e.target.value || undefined,
+                        }))
+                      }
+                      className="text-xs min-h-[60px]"
+                    />
+                  </div>
+                </div>
+
+                {/* File Upload */}
+                <div>
+                  <Label className="text-xs mb-2 block">
+                    Or Upload JSON File
+                  </Label>
+                  <label className="w-full block">
+                    <input
+                      type="file"
+                      accept=".json"
+                      onChange={handleConfigUpload}
+                      className="hidden"
+                      id="config-file-input"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full text-xs cursor-pointer"
+                      onClick={() =>
+                        document.getElementById("config-file-input")?.click()
+                      }
+                      suppressHydrationWarning
+                    >
+                      📁 Choose File
+                    </Button>
+                  </label>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex gap-2">
+                  <Button
+                    onClick={handleApplyConfig}
+                    variant="default"
+                    className="flex-1 text-xs"
+                    suppressHydrationWarning
+                  >
+                    Apply Config
+                  </Button>
+                  <Button
+                    onClick={downloadConfigTemplate}
+                    variant="outline"
+                    className="flex-1 text-xs"
+                    suppressHydrationWarning
+                  >
+                    Download Template
+                  </Button>
+                </div>
               </CardContent>
             </Card>
 
@@ -945,22 +1460,35 @@ export default function DashboardPage() {
                 <CardDescription>Aligned with Spectra pitch.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-2">
-                {(["conservative", "aggressive", "anomalous", "rogue", "dormant"] as AgentBehavior[]).map(
-                  (label) => (
-                    <div key={label} className="flex items-center justify-between text-xs">
-                      <Badge variant="outline" className={behaviorBadgeClasses[label]}>
-                        {behaviorLabels[label]}
-                      </Badge>
-                      <span className="text-muted-foreground">
-                        {label === "conservative" && "Low risk, steady cadence"}
-                        {label === "aggressive" && "Higher frequency, larger size"}
-                        {label === "anomalous" && "Deviation from baseline"}
-                        {label === "rogue" && "Critical, possible compromise"}
-                        {label === "dormant" && "Inactive beyond expected window"}
-                      </span>
-                    </div>
-                  )
-                )}
+                {(
+                  [
+                    "conservative",
+                    "aggressive",
+                    "anomalous",
+                    "rogue",
+                    "dormant",
+                  ] as AgentBehavior[]
+                ).map((label) => (
+                  <div
+                    key={label}
+                    className="flex items-center justify-between text-xs"
+                  >
+                    <Badge
+                      variant="outline"
+                      className={behaviorBadgeClasses[label]}
+                    >
+                      {behaviorLabels[label]}
+                    </Badge>
+                    <span className="text-muted-foreground">
+                      {label === "conservative" && "Low risk, steady cadence"}
+                      {label === "aggressive" &&
+                        "Higher frequency, larger size"}
+                      {label === "anomalous" && "Deviation from baseline"}
+                      {label === "rogue" && "Critical, possible compromise"}
+                      {label === "dormant" && "Inactive beyond expected window"}
+                    </span>
+                  </div>
+                ))}
               </CardContent>
             </Card>
           </div>
@@ -993,21 +1521,38 @@ export default function DashboardPage() {
                     <tr key={stat.id} className="border-b last:border-b-0">
                       <td className="py-3 pr-4">
                         <div className="flex items-center gap-2">
-                          <span className={`h-2 w-2 rounded-full ${stat.dot}`} />
+                          <span
+                            className={`h-2 w-2 rounded-full ${stat.dot}`}
+                          />
                           <div>
-                            <p className="font-medium text-foreground">{stat.name}</p>
-                            <p className="text-[11px] text-muted-foreground">{stat.role}</p>
+                            <p className="font-medium text-foreground">
+                              {stat.name}
+                            </p>
+                            <p className="text-[11px] text-muted-foreground">
+                              {stat.role}
+                            </p>
                           </div>
                         </div>
                       </td>
                       <td className="py-3 pr-4">{stat.totalTrades}</td>
-                      <td className="py-3 pr-4">{formatNumber(stat.avgAmount, 0)}</td>
-                      <td className="py-3 pr-4">{formatNumber(stat.avgRisk, 1)}</td>
-                      <td className="py-3 pr-4">{formatNumber(stat.avgConfidence * 100, 0)}%</td>
+                      <td className="py-3 pr-4">
+                        {formatNumber(stat.avgAmount, 0)}
+                      </td>
+                      <td className="py-3 pr-4">
+                        {formatNumber(stat.avgRisk, 1)}
+                      </td>
+                      <td className="py-3 pr-4">
+                        {formatNumber(stat.avgConfidence * 100, 0)}%
+                      </td>
                       <td className="py-3 pr-4">{stat.badTrades}</td>
                       <td className="py-3 pr-4">
-                        <Badge variant="outline" className={behaviorBadgeClasses[stat.behavior]}>
-                          {behaviorLabels[stat.behavior]}
+                        <Badge
+                          variant="outline"
+                          className={
+                            behaviorBadgeClasses[stat.behavior as AgentBehavior]
+                          }
+                        >
+                          {behaviorLabels[stat.behavior as AgentBehavior]}
                         </Badge>
                       </td>
                       <td className="py-3">
