@@ -8,9 +8,8 @@
 
 .eb-canvas-container {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
+  top: 0;
+  left: 0;
   pointer-events: none;
   z-index: 2;
 }
@@ -44,19 +43,26 @@
 }
 
 .eb-glow-1 {
-  border: 2px solid oklch(from var(--electric-border-color) l c h / 0.6);
+  border: 2px solid oklch(from var(--electric-border-color) l c h / 0.7);
   filter: blur(1px);
+  box-shadow: 0 0 8px oklch(from var(--electric-border-color) l c h / 0.5);
 }
 
 .eb-glow-2 {
   border: 2px solid var(--electric-light-color);
-  filter: blur(4px);
+  filter: blur(6px);
+  box-shadow: 0 0 16px oklch(from var(--electric-border-color) l c h / 0.6);
 }
 
 .eb-background-glow {
   z-index: -1;
-  transform: scale(1.1);
-  filter: blur(32px);
-  opacity: 0.3;
+  transform: scale(1.15);
+  filter: blur(40px);
+  opacity: 0.4;
   background: linear-gradient(-30deg, var(--electric-light-color), transparent, var(--electric-border-color));
+  box-shadow: 0 0 60px oklch(from var(--electric-border-color) l c h / 0.4);
+}
+
+.electric-pricing-card {
+  box-shadow: 0 0 20px oklch(from var(--electric-border-color) l c h / 0.3);
 }
