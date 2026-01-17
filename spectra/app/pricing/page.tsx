@@ -11,6 +11,40 @@ import {
 } from "@hugeicons/core-free-icons";
 import LightRays from "@/components/LightRays";
 import ElectricBorder from "@/components/ElectricBorder";
+import CardNav, { CardNavItem } from "@/components/CardNav";
+
+const navItems: CardNavItem[] = [
+  {
+    label: "Product",
+    bgColor: "#0f172a",
+    textColor: "#e2e8f0",
+    links: [
+      { label: "Dashboard", href: "/dashboard", ariaLabel: "View dashboard" },
+      { label: "Waitlist", href: "/waitlist", ariaLabel: "Join the waitlist" },
+      { label: "Pricing", href: "/pricing", ariaLabel: "View pricing" },
+    ],
+  },
+  {
+    label: "Developers",
+    bgColor: "#164e63",
+    textColor: "#e2e8f0",
+    links: [
+      { label: "SDK", href: "/sdk", ariaLabel: "View SDK" },
+      { label: "Docs", href: "/docs", ariaLabel: "View documentation" },
+      { label: "API Reference", href: "/docs/api", ariaLabel: "API reference" },
+    ],
+  },
+  {
+    label: "Resources",
+    bgColor: "#312e81",
+    textColor: "#e2e8f0",
+    links: [
+      { label: "GitHub", href: "https://github.com", ariaLabel: "View GitHub" },
+      { label: "Discord", href: "#discord", ariaLabel: "Join Discord" },
+      { label: "Support", href: "/support", ariaLabel: "Get support" },
+    ],
+  },
+];
 
 const pricingPlans = [
   {
@@ -153,15 +187,18 @@ function FAQSection() {
 export default function PricingPage() {
   return (
     <div className="min-h-screen relative bg-gradient-to-br from-slate-50 via-white to-slate-100 text-slate-800">
-      <header className="bg-white/70 backdrop-blur-xl border-b border-white/40 shadow-lg shadow-black/5 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto flex items-center justify-between px-6 py-4">
-          <Link href="/" className="font-semibold text-lg text-slate-800">
-            spectra
-          </Link>
-          <div className="flex items-center gap-6">
-          </div>
-        </div>
-      </header>
+      {/* Navbar */}
+      <CardNav
+        logoText="spectra"
+        items={navItems}
+        baseColor="rgba(255, 255, 255, 0.1)"
+        menuColor="#fff"
+        buttonBgColor="#a5f3fc"
+        buttonTextColor="#0f172a"
+        buttonText="Login"
+        buttonHref="/login"
+        hideOnScroll={true}
+      />
 
       <main className="relative z-10">
         {/* Light Rays Background */}
@@ -183,7 +220,7 @@ export default function PricingPage() {
         </div>
 
         {/* Hero Section */}
-        <section className="pt-16 pb-12 px-6 relative z-10">
+        <section className="pt-32 pb-12 px-6 relative z-10">
           <div className="max-w-4xl mx-auto text-center">
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-slate-800 mb-6">
               Simple, transparent pricing

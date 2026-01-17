@@ -103,9 +103,9 @@ const navItems: CardNavItem[] = [
     bgColor: "#0f172a",
     textColor: "#e2e8f0",
     links: [
-      { label: "Features", href: "#features", ariaLabel: "View features" },
       { label: "Dashboard", href: "/dashboard", ariaLabel: "View dashboard" },
       { label: "Waitlist", href: "/waitlist", ariaLabel: "Join the waitlist" },
+      { label: "Pricing", href: "/pricing", ariaLabel: "View pricing" },
     ],
   },
   {
@@ -182,6 +182,7 @@ export default function Page() {
         buttonTextColor="#0f172a"
         buttonText="Login"
         buttonHref="/login"
+        hideOnScroll={true}
         actions={navActions}
       />
 

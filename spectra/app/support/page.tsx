@@ -5,10 +5,44 @@ import Link from "next/link";
 import Aurora from "@/components/Aurora";
 import BlurText from "@/components/BlurText";
 import Magnet from "@/components/Magnet";
+import CardNav, { CardNavItem } from "@/components/CardNav";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+
+const navItems: CardNavItem[] = [
+  {
+    label: "Product",
+    bgColor: "#0f172a",
+    textColor: "#e2e8f0",
+    links: [
+      { label: "Dashboard", href: "/dashboard", ariaLabel: "View dashboard" },
+      { label: "Waitlist", href: "/waitlist", ariaLabel: "Join the waitlist" },
+      { label: "Pricing", href: "/pricing", ariaLabel: "View pricing" },
+    ],
+  },
+  {
+    label: "Developers",
+    bgColor: "#164e63",
+    textColor: "#e2e8f0",
+    links: [
+      { label: "SDK", href: "/sdk", ariaLabel: "View SDK" },
+      { label: "Docs", href: "/docs", ariaLabel: "View documentation" },
+      { label: "API Reference", href: "/docs/api", ariaLabel: "API reference" },
+    ],
+  },
+  {
+    label: "Resources",
+    bgColor: "#312e81",
+    textColor: "#e2e8f0",
+    links: [
+      { label: "GitHub", href: "https://github.com", ariaLabel: "View GitHub" },
+      { label: "Discord", href: "#discord", ariaLabel: "Join Discord" },
+      { label: "Support", href: "/support", ariaLabel: "Get support" },
+    ],
+  },
+];
 
 export default function SupportPage() {
   const [formData, setFormData] = useState({
@@ -42,14 +76,18 @@ export default function SupportPage() {
         speed={0.4}
       />
       
-      {/* Header */}
-      <header className="relative z-50 bg-slate-900/50 backdrop-blur-xl border-b border-white/10 sticky top-0">
-        <div className="max-w-7xl mx-auto flex items-center justify-between px-6 py-4">
-          <Link href="/" className="font-semibold text-lg text-white">
-            spectra
-          </Link>
-        </div>
-      </header>
+      {/* Navbar */}
+      <CardNav
+        logoText="spectra"
+        items={navItems}
+        baseColor="rgba(255, 255, 255, 0.1)"
+        menuColor="#fff"
+        buttonBgColor="#a5f3fc"
+        buttonTextColor="#0f172a"
+        buttonText="Login"
+        buttonHref="/login"
+        hideOnScroll={true}
+      />
 
       {/* Contact Form Section */}
       <section className="relative h-[calc(100vh-80px)] w-full flex items-center justify-center px-6">
