@@ -247,8 +247,32 @@ class DashboardScreen(Screen):
         margin-left: 1;
     }
 
+    #api-columns {
+        width: 100%;
+        height: 1fr;
+    }
+
+    #agent-api,
+    #system-api {
+        width: 1fr;
+        height: 100%;
+        border: solid #333333;
+        background: #000000;
+        padding: 1;
+    }
+
+    #system-api {
+        margin-left: 1;
+    }
+
     .box-title {
         color: #ffffff;
+        text-style: bold;
+        margin-bottom: 1;
+    }
+
+    .sub-title {
+        color: #aaaaaa;
         text-style: bold;
         margin-bottom: 1;
     }
@@ -259,7 +283,8 @@ class DashboardScreen(Screen):
         background: #000000;
     }
 
-    #api-log {
+    #agent-api-log,
+    #system-api-log {
         width: 100%;
         height: 1fr;
         background: #000000;
@@ -338,7 +363,13 @@ class DashboardScreen(Screen):
 
                 with Vertical(id="api-box"):
                     yield Label("API", classes="box-title")
-                    yield RichLog(id="api-log", markup=True, wrap=True)
+                    with Horizontal(id="api-columns"):
+                        with Vertical(id="agent-api"):
+                            yield Label("AGENT STREAM", classes="sub-title")
+                            yield RichLog(id="agent-api-log", markup=True, wrap=True)
+                        with Vertical(id="system-api"):
+                            yield Label("SYSTEM OUT", classes="sub-title")
+                            yield RichLog(id="system-api-log", markup=True, wrap=True)
 
             yield Label("Waiting...", id="status")
 
@@ -418,13 +449,7 @@ class DashboardScreen(Screen):
         trades = data.get("trades", [])
         if trades and trades[0].get("id") != self._last_trade_id:
             self._last_trade_id = trades[0].get("id")
-            log = self.query_one("#api-log", RichLog)
-            ts = datetime.now().strftime("%H:%M:%S")
-            log.write(f"[white]-- {ts} NEW TRADE --[/white]")
-            trade_json = json.dumps(trades[0], indent=2, default=str)
-            for line in trade_json.split("\n"):
-                log.write(f"[grey70]{line}[/grey70]")
-            log.write("")
+            self._log_api_event(trades[0])
 
         # Update status
         ts = data.get("timestamp", "")
@@ -435,15 +460,64 @@ class DashboardScreen(Screen):
             time_str = "??:??:??"
         self.query_one("#status", Label).update(f"Last sync: {time_str} | {len(data.get('trades', []))} trades | R=refresh C=clear Q=quit")
 
+    def _log_api_event(self, trade: dict[str, Any]) -> None:
+        agent_log = self.query_one("#agent-api-log", RichLog)
+        system_log = self.query_one("#system-api-log", RichLog)
+        ts = datetime.now().strftime("%H:%M:%S")
+        agent = str(trade.get("agent", "?")).upper()
+
+        request_payload = {
+            "token": trade.get("token"),
+            "action": trade.get("action"),
+            "confidence": trade.get("confidence"),
+            "priceImpact": trade.get("priceImpact"),
+            "riskScore": trade.get("riskScore"),
+        }
+        response_payload = {
+            "decision": trade.get("decision"),
+            "trade": {
+                "action": trade.get("action"),
+                "token": trade.get("token"),
+                "amount": trade.get("amount"),
+            },
+            "behavior": trade.get("behavior"),
+        }
+
+        agent_log.write(f"[white]-- {ts} [{agent}] INBOUND /signals/market-snapshot --[/white]")
+        for line in json.dumps(request_payload, indent=2, default=str).split("\n"):
+            agent_log.write(f"[grey70]{line}[/grey70]")
+        agent_log.write(f"[cyan]-- {ts} [{agent}] RESPONSE /decisions --[/cyan]")
+        for line in json.dumps(response_payload, indent=2, default=str).split("\n"):
+            agent_log.write(f"[grey70]{line}[/grey70]")
+        agent_log.write("")
+
+        is_alert = trade.get("isBadTrade") or trade.get("behavior") in ("anomalous", "rogue")
+        endpoint = "/alerts" if is_alert else "/reports"
+        system_payload = {
+            "tradeId": trade.get("id"),
+            "agent": trade.get("agent"),
+            "action": trade.get("action"),
+            "token": trade.get("token"),
+            "amount": trade.get("amount"),
+            "riskScore": trade.get("riskScore"),
+            "status": "flagged" if is_alert else "sent",
+        }
+
+        system_log.write(f"[white]-- {ts} POST {endpoint} --[/white]")
+        for line in json.dumps(system_payload, indent=2, default=str).split("\n"):
+            system_log.write(f"[grey70]{line}[/grey70]")
+        system_log.write("")
+
     def _on_error(self, msg: str) -> None:
-        log = self.query_one("#api-log", RichLog)
+        log = self.query_one("#system-api-log", RichLog)
         log.write(f"[red]ERROR: {msg[:60]}[/red]")
 
     def action_refresh(self) -> None:
         self._fetch()
 
     def action_clear(self) -> None:
-        self.query_one("#api-log", RichLog).clear()
+        self.query_one("#agent-api-log", RichLog).clear()
+        self.query_one("#system-api-log", RichLog).clear()
 
     def action_quit(self) -> None:
         self.app.exit()

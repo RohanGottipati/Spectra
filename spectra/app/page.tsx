@@ -115,6 +115,7 @@ const navItems: CardNavItem[] = [
     links: [
       { label: "SDK", href: "/sdk", ariaLabel: "View SDK" },
       { label: "Docs", href: "/docs", ariaLabel: "View documentation" },
+      { label: "API", href: "/api", ariaLabel: "View API" },
     ],
   },
   {
@@ -189,9 +190,9 @@ export default function Page() {
       <section className="relative min-h-screen w-full overflow-hidden">
         <div className="absolute inset-0 w-full h-full">
           <Iridescence
-            color={[0.03, 0.52, 0.68]}
-            speed={0.12}
-            amplitude={0.05}
+            color={[0.08, 0.72, 0.82]}
+            speed={0.18}
+            amplitude={0.12}
             mouseReact={true}
           />
         </div>

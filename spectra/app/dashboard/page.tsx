@@ -4,8 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { FloatingHeader } from "@/components/ui/floating-header";
-import { useRequireAuth } from "@/lib/auth";
+import CardNav, { CardNavItem } from "@/components/CardNav";
+import { useRequireAuth, useAuth } from "@/lib/auth";
+import { useRouter } from "next/navigation";
 import {
   Card,
   CardContent,
@@ -24,8 +25,10 @@ import {
 } from "@/components/ui/select";
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -33,6 +36,8 @@ import {
 import { ShimmerButton } from "@/components/ui/shimmer-button";
 import { NumberTicker } from "@/components/ui/number-ticker";
 import { ShineBorder } from "@/components/ui/shine-border";
+import DotGrid from "@/components/DotGrid";
+import SpotlightCard from "@/components/SpotlightCard";
 import { createClient } from "@/lib/supabase/client";
 
 type AgentId = "alpha" | "beta" | "gamma";
@@ -91,6 +96,36 @@ interface Trade extends TradeInput {
   isBadTrade: boolean;
   badReason?: string;
   window: TradeWindow;
+}
+
+interface ApiPayload {
+  endpoint: string;
+  payload: Record<string, string | number>;
+}
+
+interface AgentApiEvent {
+  id: string;
+  agent: AgentId;
+  timestamp: Date;
+  request: ApiPayload;
+  response: {
+    decision: string;
+    action: TradeAction;
+    token: string;
+    amount: number;
+    riskScore: number;
+    behavior: TradeBehavior;
+    confidence: number;
+  };
+}
+
+interface SystemApiEvent {
+  id: string;
+  timestamp: Date;
+  method: "POST" | "GET";
+  endpoint: string;
+  status: "sent" | "flagged";
+  payload: Record<string, string | number>;
 }
 
 interface Baseline {
@@ -162,6 +197,40 @@ const AGENTS: {
   },
 ];
 
+// Navigation items for CardNav (same as main page)
+const navItems: CardNavItem[] = [
+  {
+    label: "Product",
+    bgColor: "#0f172a",
+    textColor: "#e2e8f0",
+    links: [
+      { label: "Dashboard", href: "/dashboard", ariaLabel: "View dashboard" },
+      { label: "Waitlist", href: "/waitlist", ariaLabel: "Join the waitlist" },
+      { label: "Pricing", href: "/pricing", ariaLabel: "View pricing" },
+    ],
+  },
+  {
+    label: "Developers",
+    bgColor: "#164e63",
+    textColor: "#e2e8f0",
+    links: [
+      { label: "SDK", href: "/sdk", ariaLabel: "View SDK" },
+      { label: "Docs", href: "/docs", ariaLabel: "View documentation" },
+      { label: "API", href: "/api", ariaLabel: "View API" },
+    ],
+  },
+  {
+    label: "Resources",
+    bgColor: "#312e81",
+    textColor: "#e2e8f0",
+    links: [
+      { label: "GitHub", href: "https://github.com", ariaLabel: "View GitHub" },
+      { label: "Discord", href: "#discord", ariaLabel: "Join Discord" },
+      { label: "Support", href: "/support", ariaLabel: "Get support" },
+    ],
+  },
+];
+
 const ACTIONS: TradeAction[] = ["buy", "sell", "swap"];
 const TOKENS = ["SOL", "USDC", "JUP", "RAY", "BONK", "JTO"];
 const STRATEGIES = [
@@ -193,14 +262,16 @@ const DECISIONS: Record<TradeAction, string[]> = {
 const WINDOW_MS = 12 * 60 * 1000;
 const DORMANT_MS = 10 * 60 * 1000;
 const MAX_TRADES = 180;
+const MAX_API_EVENTS = 12;
+const ANOMALY_RECENCY_MS = 2 * 60 * 1000;
 const BASELINE: Baseline = { avgAmount: 2400, avgImpact: 1.2, freqPerMin: 0.3 };
 
 const behaviorBadgeClasses: Record<AgentBehavior, string> = {
-  conservative: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  aggressive: "border-amber-200 bg-amber-50 text-amber-700",
-  anomalous: "border-red-200 bg-red-50 text-red-700",
-  rogue: "border-rose-200 bg-rose-50 text-rose-700",
-  dormant: "border-slate-200 bg-slate-50 text-slate-600",
+  conservative: "border-emerald-500/30 bg-emerald-500/10 text-emerald-400",
+  aggressive: "border-amber-500/30 bg-amber-500/10 text-amber-400",
+  anomalous: "border-red-500/30 bg-red-500/10 text-red-400",
+  rogue: "border-rose-500/30 bg-rose-500/10 text-rose-400",
+  dormant: "border-zinc-600 bg-zinc-800/50 text-zinc-500",
 };
 
 const behaviorLabels: Record<AgentBehavior, string> = {
@@ -236,6 +307,14 @@ function formatNumber(value: number, digits = 0) {
     minimumFractionDigits: digits,
     maximumFractionDigits: digits,
   });
+}
+
+function formatPayloadValue(value: string | number) {
+  if (typeof value === "number") {
+    const digits = Number.isInteger(value) ? 0 : 2;
+    return formatNumber(value, digits);
+  }
+  return value;
 }
 
 function detectBadTrade(trade: TradeInput) {
@@ -401,8 +480,59 @@ function buildTradeInput(overrides: Partial<TradeInput> = {}): TradeInput {
   };
 }
 
+function buildAgentApiEvent(trade: Trade): AgentApiEvent {
+  return {
+    id: trade.id,
+    agent: trade.agent,
+    timestamp: trade.timestamp,
+    request: {
+      endpoint: "/signals/market-snapshot",
+      payload: {
+        token: trade.token,
+        action: trade.action.toUpperCase(),
+        confidence: Math.round(trade.confidence * 100),
+        impact: Number(trade.priceImpact.toFixed(2)),
+        windowTrades: trade.window.tradeCount,
+      },
+    },
+    response: {
+      decision: trade.decision,
+      action: trade.action,
+      token: trade.token,
+      amount: trade.amount,
+      riskScore: trade.riskScore,
+      behavior: trade.behavior,
+      confidence: Math.round(trade.confidence * 100),
+    },
+  };
+}
+
+function buildSystemApiEvent(trade: Trade): SystemApiEvent {
+  const isAlert =
+    trade.isBadTrade ||
+    trade.behavior === "anomalous" ||
+    trade.behavior === "rogue";
+  return {
+    id: `sys-${trade.id}`,
+    timestamp: trade.timestamp,
+    method: "POST",
+    endpoint: isAlert ? "/alerts" : "/reports",
+    status: isAlert ? "flagged" : "sent",
+    payload: {
+      tradeId: trade.id.slice(0, 8),
+      agent: trade.agent,
+      action: trade.action.toUpperCase(),
+      token: trade.token,
+      amount: Math.round(trade.amount),
+      risk: trade.riskScore,
+    },
+  };
+}
+
 export default function DashboardPage() {
   const { user, loading } = useRequireAuth();
+  const { signOut } = useAuth();
+  const router = useRouter();
   const [trades, setTrades] = useState<Trade[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const [intervalId, setIntervalId] = useState<NodeJS.Timeout | null>(null);
@@ -448,6 +578,24 @@ export default function DashboardPage() {
     allowedStrategies: undefined,
     description: undefined,
   });
+  const [isApiTraceOpen, setIsApiTraceOpen] = useState(false);
+  const [agentApiEvents, setAgentApiEvents] = useState<
+    Record<AgentId, AgentApiEvent[]>
+  >({
+    alpha: [],
+    beta: [],
+    gamma: [],
+  });
+  const [systemApiEvents, setSystemApiEvents] = useState<SystemApiEvent[]>([]);
+  const [newApiEventIds, setNewApiEventIds] = useState<Set<string>>(new Set());
+  const lastApiTradeIdRef = useRef<string | null>(null);
+  const apiEventTimersRef = useRef<Array<ReturnType<typeof setTimeout>>>([]);
+  const [isKillSwitchArmed, setIsKillSwitchArmed] = useState(true);
+  const [killSwitchTriggered, setKillSwitchTriggered] = useState(false);
+  const [agentsDisabled, setAgentsDisabled] = useState(false);
+  const [lastAnomalyTrade, setLastAnomalyTrade] = useState<Trade | null>(null);
+  const lastAnomalyTradeIdRef = useRef<string | null>(null);
+  const reportedAnomaliesRef = useRef<Set<string>>(new Set());
 
   const addTrades = useCallback((inputs: TradeInput[]) => {
     setTrades((prev) => {
@@ -469,6 +617,10 @@ export default function DashboardPage() {
   );
 
   const toggleSimulation = () => {
+    if (agentsDisabled) {
+      setKillSwitchTriggered(true);
+      return;
+    }
     if (isRunning && intervalId) {
       clearInterval(intervalId);
       setIntervalId(null);
@@ -497,6 +649,10 @@ export default function DashboardPage() {
   };
 
   const toggleLiveAgents = () => {
+    if (agentsDisabled) {
+      setKillSwitchTriggered(true);
+      return;
+    }
     if (isRunning) {
       setIsRunning(false);
       return;
@@ -516,6 +672,20 @@ export default function DashboardPage() {
     );
   };
 
+  const injectAnomalyTrade = () => {
+    const agent = pickOne(AGENTS).id;
+    addTrade(
+      buildTradeInput({
+        agent,
+        action: "sell",
+        amount: Math.round(11500 + Math.random() * 3500),
+        priceImpact: Number((5.2 + Math.random() * 1.5).toFixed(2)),
+        confidence: Number((0.4 + Math.random() * 0.08).toFixed(2)),
+        decision: "Forced anomaly test: liquidity shock exit",
+      }),
+    );
+  };
+
   const handleConfigUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -531,6 +701,87 @@ export default function DashboardPage() {
     };
     reader.readAsText(file);
   };
+
+  const handleLogout = async () => {
+    await signOut();
+    router.push('/');
+    router.refresh();
+  };
+
+  // Navigation actions for logged-in users
+  const navActions = (
+    <button
+      type="button"
+      onClick={handleLogout}
+      className="card-nav-cta-button"
+      style={{ backgroundColor: "#a5f3fc", color: "#0f172a" }}
+    >
+      Logout
+    </button>
+  );
+
+  const handleRestartAgents = useCallback(() => {
+    setAgentsDisabled(false);
+    setKillSwitchTriggered(false);
+    setLastAnomalyTrade(null);
+  }, []);
+
+  const engageKillSwitch = useCallback(
+    (trade: Trade) => {
+      if (!isKillSwitchArmed || agentsDisabled) return;
+      setAgentsDisabled(true);
+      setKillSwitchTriggered(true);
+      setLastAnomalyTrade(trade);
+      setLastTriggerResult("Kill switch engaged");
+      setIsRunning(false);
+      setIntervalId((current) => {
+        if (current) clearInterval(current);
+        return null;
+      });
+    },
+    [agentsDisabled, isKillSwitchArmed],
+  );
+
+  const reportAnomaly = useCallback(async (trade: Trade) => {
+    if (reportedAnomaliesRef.current.has(trade.id)) return;
+    reportedAnomaliesRef.current.add(trade.id);
+    if (reportedAnomaliesRef.current.size > 200) {
+      reportedAnomaliesRef.current.clear();
+      reportedAnomaliesRef.current.add(trade.id);
+    }
+
+    const agentMeta = AGENTS.find((agent) => agent.id === trade.agent);
+    const payload = {
+      content: `:rotating_light: Spectra anomaly detected for ${agentMeta?.name || trade.agent}`,
+      embeds: [
+        {
+          title: "Agent anomaly detected",
+          color: 16425630,
+          fields: [
+            { name: "Agent", value: agentMeta?.name || trade.agent, inline: true },
+            { name: "Behavior", value: trade.behavior, inline: true },
+            { name: "Risk Score", value: `${trade.riskScore}`, inline: true },
+            {
+              name: "Action",
+              value: `${trade.action.toUpperCase()} ${formatNumber(trade.amount, 0)} ${trade.token}`,
+            },
+            { name: "Decision", value: trade.decision.slice(0, 180) },
+          ],
+          timestamp: trade.timestamp.toISOString(),
+        },
+      ],
+    };
+
+    try {
+      await fetch("/api/alerts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    } catch (error) {
+      console.error("Failed to send anomaly webhook:", error);
+    }
+  }, []);
 
   const handleApplyConfig = async () => {
     setIsSavingConfig(true);
@@ -669,12 +920,98 @@ export default function DashboardPage() {
     return () => clearInterval(intervalId);
   }, [intervalId]);
 
+  useEffect(() => {
+    return () => {
+      apiEventTimersRef.current.forEach((timeoutId) =>
+        clearTimeout(timeoutId),
+      );
+      apiEventTimersRef.current = [];
+    };
+  }, []);
+
   // Clear hover if hovered trade is no longer in the list
   useEffect(() => {
     if (hoveredTradeId && !trades.some((trade) => trade.id === hoveredTradeId)) {
       setHoveredTradeId(null);
     }
   }, [trades, hoveredTradeId]);
+
+  useEffect(() => {
+    if (!trades.length) return;
+    const lastId = lastApiTradeIdRef.current;
+    let newTrades = trades;
+    if (lastId) {
+      const lastIndex = trades.findIndex((trade) => trade.id === lastId);
+      newTrades = lastIndex === -1 ? trades : trades.slice(0, lastIndex);
+    }
+    if (!newTrades.length) return;
+
+    lastApiTradeIdRef.current = trades[0].id;
+    const ordered = [...newTrades].reverse();
+    const newIds = ordered.flatMap((trade) => [trade.id, `sys-${trade.id}`]);
+
+    setNewApiEventIds((prev) => {
+      const next = new Set(prev);
+      newIds.forEach((id) => next.add(id));
+      return next;
+    });
+
+    setAgentApiEvents((prev) => {
+      const next = { ...prev };
+      ordered.forEach((trade) => {
+        const event = buildAgentApiEvent(trade);
+        next[trade.agent] = [event, ...(next[trade.agent] || [])].slice(
+          0,
+          MAX_API_EVENTS,
+        );
+      });
+      return next;
+    });
+
+    setSystemApiEvents((prev) => {
+      let next = [...prev];
+      ordered.forEach((trade) => {
+        const event = buildSystemApiEvent(trade);
+        next = [event, ...next].slice(0, MAX_API_EVENTS);
+      });
+      return next;
+    });
+
+    const timeoutId = window.setTimeout(() => {
+      setNewApiEventIds((prev) => {
+        const next = new Set(prev);
+        newIds.forEach((id) => next.delete(id));
+        return next;
+      });
+    }, 700);
+    apiEventTimersRef.current.push(timeoutId);
+  }, [trades]);
+
+  useEffect(() => {
+    if (!trades.length) return;
+    const lastId = lastAnomalyTradeIdRef.current;
+    let newTrades = trades;
+    if (lastId) {
+      const lastIndex = trades.findIndex((trade) => trade.id === lastId);
+      newTrades = lastIndex === -1 ? trades : trades.slice(0, lastIndex);
+    } else {
+      newTrades = trades.slice(0, 1);
+    }
+    if (!newTrades.length) return;
+
+    lastAnomalyTradeIdRef.current = trades[0].id;
+    const ordered = [...newTrades].reverse();
+    const now = Date.now();
+
+    ordered.forEach((trade) => {
+      const isAnomaly =
+        trade.behavior === "anomalous" || trade.behavior === "rogue";
+      if (!isAnomaly) return;
+      if (now - trade.timestamp.getTime() > ANOMALY_RECENCY_MS) return;
+      reportAnomaly(trade);
+      engageKillSwitch(trade);
+    });
+  }, [trades, engageKillSwitch, reportAnomaly]);
 
   // Fetch initial trades and subscribe to realtime updates
   useEffect(() => {
@@ -797,6 +1134,11 @@ export default function DashboardPage() {
 
   // Function to trigger all agents
   const triggerAgents = async () => {
+    if (agentsDisabled) {
+      setKillSwitchTriggered(true);
+      setLastTriggerResult("Kill switch engaged");
+      return;
+    }
     setIsTriggering(true);
     setLastTriggerResult(null);
 
@@ -842,7 +1184,7 @@ export default function DashboardPage() {
 
   // Auto-trigger agents when simulation is running
   useEffect(() => {
-    if (!isRunning || !useRealData) return;
+    if (!isRunning || !useRealData || agentsDisabled) return;
 
     // Trigger immediately
     triggerAgents();
@@ -853,7 +1195,7 @@ export default function DashboardPage() {
     }, 30000);
 
     return () => clearInterval(id);
-  }, [isRunning, useRealData]);
+  }, [isRunning, useRealData, agentsDisabled]);
 
   const now = Date.now();
 
@@ -1095,10 +1437,10 @@ export default function DashboardPage() {
   // Show loading state while checking auth (after all hooks)
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 flex items-center justify-center">
+      <div className="min-h-screen bg-black flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin h-8 w-8 border-4 border-slate-300 border-t-slate-900 rounded-full mx-auto mb-4"></div>
-          <p className="text-slate-600">Loading...</p>
+          <div className="animate-spin h-8 w-8 border-4 border-zinc-700 border-t-emerald-500 rounded-full mx-auto mb-4"></div>
+          <p className="text-zinc-500">Loading...</p>
         </div>
       </div>
     );
@@ -1110,62 +1452,70 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50 relative overflow-hidden">
-      {/* Vibrant pastel gradient glows */}
+    <div className="min-h-screen bg-black relative overflow-hidden">
+      {/* Subtle dark gradient glows for quant aesthetic */}
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
-        <div className="absolute -top-20 -left-20 h-[600px] w-[600px] rounded-full bg-gradient-to-br from-violet-300/70 via-purple-200/50 to-fuchsia-100/30 blur-3xl animate-pulse" style={{ animationDuration: '8s' }} />
-        <div className="absolute top-1/4 -right-10 h-[500px] w-[500px] rounded-full bg-gradient-to-bl from-sky-300/60 via-cyan-200/40 to-blue-100/30 blur-3xl animate-pulse" style={{ animationDuration: '10s', animationDelay: '2s' }} />
-        <div className="absolute -bottom-20 left-1/4 h-[450px] w-[600px] rounded-full bg-gradient-to-t from-rose-300/50 via-pink-200/40 to-orange-100/20 blur-3xl animate-pulse" style={{ animationDuration: '12s', animationDelay: '4s' }} />
-        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 h-[400px] w-[700px] rounded-full bg-gradient-to-r from-emerald-200/40 via-teal-100/30 to-cyan-200/40 blur-3xl" />
+        <DotGrid
+          dotSize={3}
+          gap={24}
+          baseColor="#475569"
+          activeColor="#7dd3fc"
+          className="h-full w-full"
+          style={{ padding: 0, opacity: 0.5 }}
+        />
+        <div className="absolute -top-40 -left-40 h-[600px] w-[600px] rounded-full bg-emerald-500/20 blur-[120px]" />
+        <div className="absolute top-1/4 -right-20 h-[500px] w-[500px] rounded-full bg-sky-500/15 blur-[100px]" />
+        <div className="absolute -bottom-40 left-1/3 h-[400px] w-[600px] rounded-full bg-violet-500/20 blur-[120px]" />
+        <div className="absolute top-1/2 left-1/4 h-[300px] w-[300px] rounded-full bg-cyan-500/10 blur-[80px]" />
       </div>
 
       <div className="relative w-full min-h-[80px]">
         <FloatingHeader />
       </div>
 
-      <main className="relative z-10 max-w-5xl mx-auto px-6 py-6 space-y-5">
+      <main className="relative z-10 max-w-5xl mx-auto px-6 pb-6 pt-24 sm:pt-28 space-y-5">
         {/* Top bar with stats and controls */}
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-5">
-            <h1 className="text-xl font-bold tracking-tight text-slate-900">Dashboard</h1>
-            {/* Animated stat badges with glassmorphism */}
+            <h1 className="text-xl font-bold tracking-tight text-zinc-100">Dashboard</h1>
+            {/* Animated stat badges with dark glassmorphism */}
             <div className="hidden md:flex items-center gap-2">
-              <div className="group flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/50 backdrop-blur-xl border border-white/60 shadow-lg shadow-slate-200/50 hover:shadow-xl hover:bg-white/70 transition-all cursor-default">
+              <div className="group flex items-center gap-2 px-3 py-1.5 rounded-full bg-zinc-900/80 backdrop-blur-xl border border-zinc-800 hover:border-zinc-700 transition-all cursor-default">
                 <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse group-hover:scale-125 transition-transform" />
-                <span className="text-xs font-semibold text-slate-600">Active</span>
-                <span className="text-sm font-bold text-slate-900">{activeAgents}/{AGENTS.length}</span>
+                <span className="text-xs font-semibold text-zinc-500">Active</span>
+                <span className="text-sm font-bold text-zinc-100">{activeAgents}/{AGENTS.length}</span>
               </div>
-              <div className={`group flex items-center gap-2 px-3 py-1.5 rounded-full backdrop-blur-xl border shadow-lg transition-all cursor-default ${
-                avgRisk >= 70 ? 'bg-red-100/50 border-red-200/60 hover:bg-red-100/70' :
-                avgRisk >= 45 ? 'bg-amber-100/50 border-amber-200/60 hover:bg-amber-100/70' :
-                'bg-white/50 border-white/60 hover:bg-white/70'
-              } hover:shadow-xl`}>
-                <span className="text-xs font-semibold text-slate-600">Risk</span>
+              <div className={`group flex items-center gap-2 px-3 py-1.5 rounded-full backdrop-blur-xl border transition-all cursor-default ${
+                avgRisk >= 70 ? 'bg-red-500/10 border-red-500/30 hover:border-red-500/50' :
+                avgRisk >= 45 ? 'bg-amber-500/10 border-amber-500/30 hover:border-amber-500/50' :
+                'bg-zinc-900/80 border-zinc-800 hover:border-zinc-700'
+              }`}>
+                <span className="text-xs font-semibold text-zinc-500">Risk</span>
                 <NumberTicker value={avgRisk} decimalPlaces={1} className={`text-sm font-bold ${
-                  avgRisk >= 70 ? 'text-red-600' :
-                  avgRisk >= 45 ? 'text-amber-600' :
-                  'text-slate-900'
+                  avgRisk >= 70 ? 'text-red-400' :
+                  avgRisk >= 45 ? 'text-amber-400' :
+                  'text-zinc-100'
                 }`} />
               </div>
-              <div className={`group flex items-center gap-2 px-3 py-1.5 rounded-full backdrop-blur-xl border shadow-lg transition-all cursor-default ${anomalyCount > 0 ? 'bg-red-100/50 border-red-200/60 hover:bg-red-100/70' : 'bg-white/50 border-white/60 hover:bg-white/70'} hover:shadow-xl`}>
+              <div className={`group flex items-center gap-2 px-3 py-1.5 rounded-full backdrop-blur-xl border transition-all cursor-default ${anomalyCount > 0 ? 'bg-red-500/10 border-red-500/30 hover:border-red-500/50' : 'bg-zinc-900/80 border-zinc-800 hover:border-zinc-700'}`}>
                 {anomalyCount > 0 && <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" />}
-                <span className="text-xs font-semibold text-slate-600">Anomalies</span>
-                <NumberTicker value={anomalyCount} className={`text-sm font-bold ${anomalyCount > 0 ? 'text-red-600' : 'text-slate-900'}`} />
+                <span className="text-xs font-semibold text-zinc-500">Anomalies</span>
+                <NumberTicker value={anomalyCount} className={`text-sm font-bold ${anomalyCount > 0 ? 'text-red-400' : 'text-zinc-100'}`} />
               </div>
-              <div className={`group flex items-center gap-2 px-3 py-1.5 rounded-full backdrop-blur-xl border shadow-lg transition-all cursor-default ${badTradeCount > 0 ? 'bg-amber-100/50 border-amber-200/60 hover:bg-amber-100/70' : 'bg-white/50 border-white/60 hover:bg-white/70'} hover:shadow-xl`}>
+              <div className={`group flex items-center gap-2 px-3 py-1.5 rounded-full backdrop-blur-xl border transition-all cursor-default ${badTradeCount > 0 ? 'bg-amber-500/10 border-amber-500/30 hover:border-amber-500/50' : 'bg-zinc-900/80 border-zinc-800 hover:border-zinc-700'}`}>
                 {badTradeCount > 0 && <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />}
-                <span className="text-xs font-semibold text-slate-600">Bad</span>
-                <NumberTicker value={badTradeCount} className={`text-sm font-bold ${badTradeCount > 0 ? 'text-amber-600' : 'text-slate-900'}`} />
+                <span className="text-xs font-semibold text-zinc-500">Bad</span>
+                <NumberTicker value={badTradeCount} className={`text-sm font-bold ${badTradeCount > 0 ? 'text-amber-400' : 'text-zinc-100'}`} />
               </div>
             </div>
           </div>
           <div className="flex items-center gap-2">
             <button
               onClick={() => setUseRealData(!useRealData)}
-              className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all shadow-sm ${
+              className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
                 useRealData
-                  ? "bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-emerald-500/25"
-                  : "bg-white/80 text-slate-600 border border-slate-200/60"
+                  ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                  : "bg-zinc-900 text-zinc-400 border border-zinc-800"
               }`}
             >
               {useRealData ? "LIVE" : "MOCK"}
@@ -1184,8 +1534,25 @@ export default function DashboardPage() {
                   }
                   setTradesPerAgent(clamp(Math.floor(value), 1, 12));
                 }}
-                className="h-8 w-14 text-xs rounded-lg bg-white/80 border-slate-200/60"
+                className="h-8 w-14 text-xs rounded-lg bg-zinc-900 border-zinc-800 text-zinc-100"
               />
+            )}
+            <Button
+              onClick={() => setIsKillSwitchArmed((prev) => !prev)}
+              variant="outline"
+              size="sm"
+              className={`rounded-lg text-xs font-semibold ${
+                isKillSwitchArmed
+                  ? "bg-red-500/10 border-red-500/40 text-red-200 hover:bg-red-500/20 hover:text-red-100"
+                  : "bg-zinc-900 border-zinc-800 text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100"
+              }`}
+            >
+              {isKillSwitchArmed ? "Kill Switch: On" : "Kill Switch: Off"}
+            </Button>
+            {agentsDisabled && (
+              <span className="px-2 py-1 rounded-full border border-red-500/40 bg-red-500/10 text-[10px] font-bold uppercase text-red-300">
+                Agents Disabled
+              </span>
             )}
             {useRealData ? (
               <>
@@ -1194,7 +1561,8 @@ export default function DashboardPage() {
                   shimmerColor={isRunning ? "#ef4444" : "#10b981"}
                   background={isRunning ? "rgba(239, 68, 68, 0.9)" : "rgba(16, 185, 129, 0.9)"}
                   borderRadius="8px"
-                  className="text-xs font-bold px-4 py-2"
+                  className="text-xs font-bold px-4 py-2 disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={agentsDisabled}
                 >
                   {isRunning ? "Stop" : "Start"} Agents
                 </ShimmerButton>
@@ -1202,10 +1570,19 @@ export default function DashboardPage() {
                   onClick={triggerAgents}
                   variant="outline"
                   size="sm"
-                  disabled={isTriggering}
-                  className="rounded-lg font-semibold bg-white/80 border-slate-200/60 hover:bg-white"
+                  disabled={isTriggering || agentsDisabled}
+                  className="rounded-lg font-semibold bg-zinc-900 border-zinc-800 text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {isTriggering ? "..." : "Trigger"}
+                </Button>
+                <Button
+                  onClick={injectAnomalyTrade}
+                  variant="outline"
+                  size="sm"
+                  disabled={agentsDisabled}
+                  className="rounded-lg font-semibold bg-zinc-900 border-zinc-800 text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Force Anomaly
                 </Button>
               </>
             ) : (
@@ -1215,29 +1592,323 @@ export default function DashboardPage() {
                   shimmerColor={isRunning ? "#ef4444" : "#6366f1"}
                   background={isRunning ? "rgba(239, 68, 68, 0.9)" : "rgba(99, 102, 241, 0.9)"}
                   borderRadius="8px"
-                  className="text-xs font-bold px-4 py-2"
+                  className="text-xs font-bold px-4 py-2 disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={agentsDisabled}
                 >
                   {isRunning ? "Stop" : "Start"} Sim
                 </ShimmerButton>
-                <Button onClick={injectBadTrade} variant="outline" size="sm" className="rounded-lg font-semibold bg-white/80 border-slate-200/60">
+                <Button
+                  onClick={injectBadTrade}
+                  variant="outline"
+                  size="sm"
+                  disabled={agentsDisabled}
+                  className="rounded-lg font-semibold bg-zinc-900 border-zinc-800 text-zinc-300 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
                   Inject
+                </Button>
+                <Button
+                  onClick={injectAnomalyTrade}
+                  variant="outline"
+                  size="sm"
+                  disabled={agentsDisabled}
+                  className="rounded-lg font-semibold bg-zinc-900 border-zinc-800 text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Force Anomaly
                 </Button>
               </>
             )}
+            {agentsDisabled && (
+              <Button
+                onClick={handleRestartAgents}
+                variant="outline"
+                size="sm"
+                className="rounded-lg font-semibold border-emerald-500/40 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20"
+              >
+                Restart Agents
+              </Button>
+            )}
+            <Dialog open={isApiTraceOpen} onOpenChange={setIsApiTraceOpen}>
+              <DialogTrigger
+                render={
+                  <ShimmerButton
+                    shimmerColor="#38bdf8"
+                    background="rgba(14, 116, 144, 0.9)"
+                    borderRadius="8px"
+                    className="text-xs font-bold px-4 py-2"
+                  />
+                }
+              >
+                API Trace
+              </DialogTrigger>
+              <DialogContent
+                showCloseButton={false}
+                className="h-[92vh] w-[96vw] max-w-none bg-transparent border-0 p-0 sm:max-w-none"
+              >
+                <div className="relative flex h-full flex-col overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950/95 p-5 shadow-xl">
+                  <DialogClose
+                    render={
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        className="absolute right-4 top-4 border border-zinc-800 bg-zinc-900/80 text-[11px] font-bold text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100"
+                      />
+                    }
+                  >
+                    X
+                    <span className="sr-only">Close</span>
+                  </DialogClose>
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <DialogHeader className="space-y-1">
+                      <DialogTitle className="text-base font-semibold text-zinc-100">
+                        Realtime API Trace
+                      </DialogTitle>
+                      <DialogDescription className="text-zinc-500">
+                        Inbound signals per agent, trade responses, and outbound system calls.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="flex items-center gap-2 rounded-full border border-zinc-800 bg-zinc-900/80 px-3 py-1 text-[10px] uppercase text-zinc-400">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      Live stream
+                    </div>
+                  </div>
+                  <div className="mt-4 grid flex-1 min-h-0 auto-rows-[minmax(0,1fr)] gap-4 overflow-hidden md:grid-cols-2 xl:grid-cols-4">
+                    {AGENTS.map((agentMeta) => {
+                      const events = agentApiEvents[agentMeta.id];
+                      const agentStat = agentStats.find(
+                        (stat) => stat.id === agentMeta.id,
+                      );
+                      const behavior = (agentStat?.behavior ??
+                        "dormant") as AgentBehavior;
+
+                      return (
+                        <SpotlightCard
+                          key={agentMeta.id}
+                          className="relative flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-zinc-800/80 bg-zinc-950/80 p-4 transition-colors hover:border-zinc-700/80"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span
+                                className={`h-2.5 w-2.5 rounded-full ${agentMeta.dot}`}
+                              />
+                              <div>
+                                <p className="text-xs font-bold text-zinc-100">
+                                  {agentMeta.name}
+                                </p>
+                                <p className="text-[10px] text-zinc-500">
+                                  {agentMeta.role}
+                                </p>
+                              </div>
+                            </div>
+                            <Badge
+                              variant="outline"
+                              className={`text-[9px] font-bold ${behaviorBadgeClasses[behavior]}`}
+                            >
+                              {behaviorLabels[behavior]}
+                            </Badge>
+                          </div>
+                          <div className="mt-3 flex-1 min-h-0 space-y-2 overflow-y-auto pr-1">
+                            {events.length ? (
+                              events.map((event) => {
+                                const isNew = newApiEventIds.has(event.id);
+                                const riskTone =
+                                  event.response.riskScore >= 70
+                                    ? "border-red-500/40 bg-red-500/5"
+                                    : event.response.riskScore >= 45
+                                    ? "border-amber-500/40 bg-amber-500/5"
+                                    : "border-emerald-500/30 bg-emerald-500/5";
+
+                                return (
+                                  <div
+                                    key={event.id}
+                                    className={`rounded-lg border ${riskTone} p-2.5 transition-colors ${isNew ? "motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-top-2 motion-safe:duration-300 ring-1 ring-cyan-400/30" : ""}`}
+                                  >
+                                    <div className="flex items-center justify-between text-[10px] text-zinc-500">
+                                      <span suppressHydrationWarning>
+                                        {event.timestamp.toLocaleTimeString()}
+                                      </span>
+                                      <span className="font-mono text-[10px] text-zinc-600">
+                                        {event.request.endpoint}
+                                      </span>
+                                    </div>
+                                    <div className="mt-2 flex flex-wrap gap-1">
+                                      {Object.entries(event.request.payload).map(
+                                        ([key, value]) => (
+                                          <span
+                                            key={`${event.id}-${key}`}
+                                            className="rounded bg-zinc-900 px-1.5 py-0.5 font-mono text-[10px] text-zinc-500"
+                                          >
+                                            {key}:{formatPayloadValue(value)}
+                                          </span>
+                                        ),
+                                      )}
+                                    </div>
+                                    <div className="mt-2 border-t border-zinc-800/70 pt-2">
+                                      <p className="text-[11px] font-semibold text-zinc-200">
+                                        {event.response.decision}
+                                      </p>
+                                      <p className="text-[10px] text-zinc-500">
+                                        {event.response.action.toUpperCase()}{" "}
+                                        {formatNumber(event.response.amount, 0)}{" "}
+                                        {event.response.token} | Risk{" "}
+                                        {event.response.riskScore}
+                                      </p>
+                                    </div>
+                                  </div>
+                                );
+                              })
+                            ) : (
+                              <div className="rounded-lg border border-dashed border-zinc-800/80 px-3 py-4 text-[11px] text-zinc-500">
+                                Waiting for inbound signals...
+                              </div>
+                            )}
+                          </div>
+                        </SpotlightCard>
+                      );
+                    })}
+                    <SpotlightCard className="relative flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-zinc-800/80 bg-zinc-950/80 p-4 transition-colors hover:border-zinc-700/80">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-xs font-bold text-zinc-100">
+                            System API
+                          </p>
+                          <p className="text-[10px] text-zinc-500">
+                            Outbound calls
+                          </p>
+                        </div>
+                        <Badge
+                          variant="outline"
+                          className="text-[9px] font-bold border-sky-500/30 bg-sky-500/10 text-sky-400"
+                        >
+                          CORE
+                        </Badge>
+                      </div>
+                      <div className="mt-3 flex-1 min-h-0 space-y-2 overflow-y-auto pr-1">
+                        {systemApiEvents.length ? (
+                          systemApiEvents.map((event) => {
+                            const isNew = newApiEventIds.has(event.id);
+                            const statusTone =
+                              event.status === "flagged"
+                                ? "border-red-500/40 bg-red-500/5 text-red-400"
+                                : "border-emerald-500/30 bg-emerald-500/5 text-emerald-400";
+
+                            return (
+                              <div
+                                key={event.id}
+                                className={`rounded-lg border border-zinc-800/70 bg-zinc-950/70 p-2.5 transition-colors ${isNew ? "motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-top-2 motion-safe:duration-300 ring-1 ring-cyan-400/30" : ""}`}
+                              >
+                                <div className="flex items-center justify-between text-[10px] text-zinc-500">
+                                  <span suppressHydrationWarning>
+                                    {event.timestamp.toLocaleTimeString()}
+                                  </span>
+                                  <span
+                                    className={`rounded-full border px-1.5 py-0.5 text-[9px] font-bold uppercase ${statusTone}`}
+                                  >
+                                    {event.status}
+                                  </span>
+                                </div>
+                                <p className="mt-2 text-[11px] font-mono text-zinc-300">
+                                  {event.method} {event.endpoint}
+                                </p>
+                                <div className="mt-2 flex flex-wrap gap-1">
+                                  {Object.entries(event.payload).map(
+                                    ([key, value]) => (
+                                      <span
+                                        key={`${event.id}-${key}`}
+                                        className="rounded bg-zinc-900 px-1.5 py-0.5 font-mono text-[10px] text-zinc-500"
+                                      >
+                                        {key}:{formatPayloadValue(value)}
+                                      </span>
+                                    ),
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })
+                        ) : (
+                          <div className="rounded-lg border border-dashed border-zinc-800/80 px-3 py-4 text-[11px] text-zinc-500">
+                            No outbound calls yet.
+                          </div>
+                        )}
+                      </div>
+                    </SpotlightCard>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+            <Dialog
+              open={killSwitchTriggered}
+              onOpenChange={setKillSwitchTriggered}
+            >
+              <DialogContent className="max-w-lg border border-red-500/30 bg-zinc-950/95">
+                <DialogHeader className="space-y-2">
+                  <DialogTitle className="text-base font-semibold text-red-200">
+                    Kill switch engaged
+                  </DialogTitle>
+                  <DialogDescription className="text-zinc-400">
+                    Automatic shutdown triggered by anomaly detection. Agents are
+                    paused until you restart them manually.
+                  </DialogDescription>
+                </DialogHeader>
+                {lastAnomalyTrade && (
+                  <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-3 text-xs text-zinc-200">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-red-200">
+                        {agentMap[lastAnomalyTrade.agent]?.name || lastAnomalyTrade.agent}
+                      </span>
+                      <Badge
+                        variant="outline"
+                        className={`text-[10px] font-bold ${behaviorBadgeClasses[lastAnomalyTrade.behavior]}`}
+                      >
+                        {behaviorLabels[lastAnomalyTrade.behavior]}
+                      </Badge>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-zinc-300">
+                      <span className="rounded bg-zinc-900 px-2 py-0.5 font-mono">
+                        {lastAnomalyTrade.action.toUpperCase()} {formatNumber(lastAnomalyTrade.amount, 0)} {lastAnomalyTrade.token}
+                      </span>
+                      <span className="rounded bg-zinc-900 px-2 py-0.5 font-mono">
+                        Risk {lastAnomalyTrade.riskScore}
+                      </span>
+                      <span className="rounded bg-zinc-900 px-2 py-0.5 font-mono">
+                        Conf {formatNumber(lastAnomalyTrade.confidence * 100, 0)}%
+                      </span>
+                    </div>
+                    <p className="mt-2 text-[11px] text-zinc-400">
+                      {lastAnomalyTrade.decision}
+                    </p>
+                  </div>
+                )}
+                <DialogFooter className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => setKillSwitchTriggered(false)}
+                    className="rounded-lg border-zinc-800 bg-zinc-900 text-zinc-300 hover:bg-zinc-800"
+                  >
+                    Dismiss
+                  </Button>
+                  <Button
+                    onClick={handleRestartAgents}
+                    className="rounded-lg bg-emerald-500/20 text-emerald-200 hover:bg-emerald-500/30"
+                  >
+                    Restart Agents
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
             <Dialog open={isConfigOpen} onOpenChange={setIsConfigOpen}>
-              <DialogTrigger render={<Button variant="outline" size="sm" className="rounded-lg font-semibold bg-white/80 border-slate-200/60" />}>
+              <DialogTrigger render={<Button variant="outline" size="sm" className="rounded-lg font-semibold bg-zinc-900 border-zinc-800 text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100" />}>
                   Config
               </DialogTrigger>
-              <DialogContent className="max-w-md bg-white/95 backdrop-blur-xl border-slate-200/60">
+              <DialogContent className="max-w-md bg-zinc-950 backdrop-blur-xl border-zinc-800">
                 <DialogHeader>
-                  <DialogTitle>Agent Configuration</DialogTitle>
-                  <DialogDescription>
+                  <DialogTitle className="text-zinc-100">Agent Configuration</DialogTitle>
+                  <DialogDescription className="text-zinc-500">
                     Set behavior parameters for agents.
                   </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4 pt-2">
                   <div>
-                    <Label className="text-sm mb-1.5 block">Agent</Label>
+                    <Label className="text-sm mb-1.5 block text-zinc-400">Agent</Label>
                     <Select
                       value={selectedAgentForConfig}
                       onValueChange={(value) => setSelectedAgentForConfig(value as AgentId)}
@@ -1256,7 +1927,7 @@ export default function DashboardPage() {
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <Label className="text-sm mb-1.5 block">Max Position</Label>
+                      <Label className="text-sm mb-1.5 block text-zinc-400">Max Position</Label>
                       <Input
                         type="number"
                         placeholder="10000"
@@ -1270,7 +1941,7 @@ export default function DashboardPage() {
                       />
                     </div>
                     <div>
-                      <Label className="text-sm mb-1.5 block">Max Daily Loss</Label>
+                      <Label className="text-sm mb-1.5 block text-zinc-400">Max Daily Loss</Label>
                       <Input
                         type="number"
                         placeholder="5000"
@@ -1286,7 +1957,7 @@ export default function DashboardPage() {
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <Label className="text-sm mb-1.5 block">Risk Tolerance</Label>
+                      <Label className="text-sm mb-1.5 block text-zinc-400">Risk Tolerance</Label>
                       <Select
                         value={formConfig.riskTolerance || ""}
                         onValueChange={(value) =>
@@ -1307,7 +1978,7 @@ export default function DashboardPage() {
                       </Select>
                     </div>
                     <div>
-                      <Label className="text-sm mb-1.5 block">Max Freq/Min</Label>
+                      <Label className="text-sm mb-1.5 block text-zinc-400">Max Freq/Min</Label>
                       <Input
                         type="number"
                         placeholder="5"
@@ -1322,7 +1993,7 @@ export default function DashboardPage() {
                     </div>
                   </div>
                   <div>
-                    <Label className="text-sm mb-1.5 block">Preferred Tokens</Label>
+                    <Label className="text-sm mb-1.5 block text-zinc-400">Preferred Tokens</Label>
                     <Input
                       placeholder="SOL, USDC, JUP"
                       value={formConfig.preferredTokens ? formConfig.preferredTokens.join(", ") : ""}
@@ -1358,25 +2029,25 @@ export default function DashboardPage() {
         {/* Chart Card */}
         <div className="relative rounded-2xl">
           <ShineBorder
-            shineColor={["#a78bfa", "#60a5fa", "#34d399"]}
-            borderWidth={2}
-            duration={8}
+            shineColor={["#10b981", "#3b82f6", "#8b5cf6"]}
+            borderWidth={1}
+            duration={12}
             className="rounded-2xl"
           />
-          <Card className="border border-white/60 bg-white/50 backdrop-blur-xl rounded-2xl shadow-2xl shadow-slate-300/30 overflow-visible">
+          <Card className="border border-zinc-800 bg-zinc-950/90 backdrop-blur-xl rounded-2xl overflow-visible">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <CardTitle className="text-sm font-bold tracking-tight text-slate-900">Behavior Timeline</CardTitle>
-                  <span className="px-2 py-0.5 rounded-full bg-slate-100 text-[10px] font-semibold text-slate-500">
+                  <CardTitle className="text-sm font-bold tracking-tight text-zinc-100">Trade Amount Timeline</CardTitle>
+                  <span className="px-2 py-0.5 rounded-full bg-zinc-800 text-[10px] font-semibold text-zinc-500">
                     {visibleWindowLabel}m window
                   </span>
                 </div>
                 <div className="flex items-center gap-4">
                   {AGENTS.map((agentMeta) => (
                     <div key={agentMeta.id} className="flex items-center gap-1.5">
-                      <span className={`h-2.5 w-2.5 rounded-full ${agentMeta.dot} shadow-sm`} />
-                      <span className="text-xs font-semibold text-slate-600">{agentMeta.name}</span>
+                      <span className={`h-2.5 w-2.5 rounded-full ${agentMeta.dot}`} />
+                      <span className="text-xs font-semibold text-zinc-400">{agentMeta.name}</span>
                     </div>
                   ))}
                 </div>
@@ -1385,24 +2056,24 @@ export default function DashboardPage() {
             <CardContent className="pt-0 pb-4 overflow-visible">
               <div
                 ref={chartWrapRef}
-                className="relative rounded-xl bg-gradient-to-br from-slate-100/80 via-white/60 to-slate-50/80 border border-white/80 p-4"
+                className="relative rounded-xl bg-zinc-900/50 border border-zinc-800/50 p-4"
                 onMouseLeave={() => setHoveredTradeId(null)}
               >
                 {trades.length === 0 && !isRunning ? (
                   <div className="flex h-[400px] items-center justify-center">
                     <div className="text-center">
                       <div className="relative">
-                        <div className="absolute inset-0 bg-gradient-to-r from-violet-400/20 via-sky-400/20 to-emerald-400/20 blur-2xl rounded-full" />
+                        <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/10 via-sky-500/10 to-violet-500/10 blur-2xl rounded-full" />
                         <div className="relative flex items-center justify-center mb-4">
-                          <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-slate-100 to-slate-50 flex items-center justify-center border border-slate-200/60 shadow-sm">
-                            <svg className="h-6 w-6 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                          <div className="h-12 w-12 rounded-xl bg-zinc-800 flex items-center justify-center border border-zinc-700">
+                            <svg className="h-6 w-6 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                               <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
                             </svg>
                           </div>
                         </div>
                       </div>
-                      <div className="text-sm font-bold text-slate-600">No trades yet</div>
-                      <div className="text-xs text-slate-400 mt-1.5 max-w-[200px]">Start the agents to begin monitoring behavior patterns</div>
+                      <div className="text-sm font-bold text-zinc-400">No trades yet</div>
+                      <div className="text-xs text-zinc-600 mt-1.5 max-w-[200px]">Start the agents to begin monitoring behavior patterns</div>
                     </div>
                   </div>
                 ) : (
@@ -1410,7 +2081,7 @@ export default function DashboardPage() {
                     viewBox={`0 0 ${chartWidth} ${chartHeight}`}
                     className="block h-[400px] w-full cursor-crosshair"
                     role="img"
-                    aria-label="Behavior risk timeline"
+                    aria-label="Trade amount timeline"
                     onMouseMove={handleChartMouseMove}
                     onMouseLeave={() => setHoveredTradeId(null)}
                   >
@@ -1427,20 +2098,19 @@ export default function DashboardPage() {
                             x2={chartWidth - chartPadding.right}
                             y1={y}
                             y2={y}
-                            stroke={isMainLine ? "#94a3b8" : isMidLine ? "#cbd5e1" : "#e2e8f0"}
+                            stroke={isMainLine ? "#3f3f46" : isMidLine ? "#27272a" : "#18181b"}
                             strokeWidth={isMainLine ? "1" : "0.5"}
                             strokeDasharray={isMainLine ? "" : isMidLine ? "4 4" : "2 6"}
-                            strokeOpacity={isMainLine ? 0.6 : isMidLine ? 0.5 : 0.4}
+                            strokeOpacity={isMainLine ? 0.8 : isMidLine ? 0.6 : 0.4}
                           />
                           {isMainLine && (
-                            <text x={6} y={y + 3} fontSize="9" fontWeight="600" fill="#64748b">
+                            <text x={6} y={y + 3} fontSize="9" fontWeight="600" fill="#71717a">
                               {formatTick(level)}
                             </text>
                           )}
                         </g>
                       );
                     })}
-
                     {/* Vertical time grid lines */}
                     {[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9].map((pct) => {
                       const x = chartPadding.left + pct * chartInnerWidth;
@@ -1451,10 +2121,10 @@ export default function DashboardPage() {
                           x2={x}
                           y1={chartPadding.top}
                           y2={chartHeight - chartPadding.bottom}
-                          stroke="#e2e8f0"
+                          stroke="#27272a"
                           strokeWidth="0.5"
                           strokeDasharray="2 6"
-                          strokeOpacity="0.5"
+                          strokeOpacity="0.6"
                         />
                       );
                     })}
@@ -1466,7 +2136,7 @@ export default function DashboardPage() {
                         x2={hoveredPoint.x}
                         y1={chartPadding.top}
                         y2={chartHeight - chartPadding.bottom}
-                        stroke="#94a3b8"
+                        stroke="#52525b"
                         strokeDasharray="4 4"
                         strokeWidth="1"
                         pointerEvents="none"
@@ -1535,7 +2205,7 @@ export default function DashboardPage() {
                                 cy={point.y}
                                 r={isHovered ? radius + 3 : radius}
                                 fill={agentMeta.color}
-                                stroke={isHovered ? "#0f172a" : point.trade.isBadTrade ? "#dc2626" : "white"}
+                                stroke={isHovered ? "#fafafa" : point.trade.isBadTrade ? "#ef4444" : "#09090b"}
                                 strokeWidth={isHovered ? 2.5 : point.trade.isBadTrade ? 2 : 1.5}
                                 pointerEvents="none"
                                 className={isHovered ? "drop-shadow-lg" : ""}
@@ -1550,7 +2220,7 @@ export default function DashboardPage() {
               )}
               {hoveredTrade && (
                 <div
-                  className="pointer-events-none absolute z-20 rounded-xl border border-white/60 bg-white/80 backdrop-blur-2xl px-4 py-3 text-xs shadow-2xl shadow-slate-900/20"
+                  className="pointer-events-none absolute z-20 rounded-xl border border-zinc-700 bg-zinc-900/95 backdrop-blur-2xl px-4 py-3 text-xs shadow-2xl shadow-black/50"
                   style={{
                     left: mousePosition.x,
                     top: mousePosition.y,
@@ -1561,11 +2231,11 @@ export default function DashboardPage() {
                 >
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-1.5">
-                      <span className={`h-2.5 w-2.5 rounded-full ${agentMap[hoveredTrade.agent].dot} shadow-sm`} />
-                      <span className="font-bold text-slate-900">
+                      <span className={`h-2.5 w-2.5 rounded-full ${agentMap[hoveredTrade.agent].dot}`} />
+                      <span className="font-bold text-zinc-100">
                         {agentMap[hoveredTrade.agent].name}
                       </span>
-                      <span className="px-1.5 py-0.5 rounded bg-slate-100 text-[10px] font-bold text-slate-600 uppercase">
+                      <span className="px-1.5 py-0.5 rounded bg-zinc-800 text-[10px] font-bold text-zinc-400 uppercase">
                         {hoveredTrade.action}
                       </span>
                     </div>
@@ -1573,32 +2243,32 @@ export default function DashboardPage() {
                       {behaviorLabels[hoveredTrade.behavior]}
                     </Badge>
                   </div>
-                  <p className="mt-2 text-slate-700 font-semibold">
+                  <p className="mt-2 text-zinc-200 font-semibold">
                     <span className="font-mono">${formatNumber(hoveredTrade.amount)}</span> {hoveredTrade.token}
                   </p>
                   <div className="mt-2.5 grid grid-cols-2 gap-x-4 gap-y-1.5 text-[10px]">
                     <div className="flex items-center justify-between">
-                      <span className="text-slate-400 font-medium">Risk</span>
-                      <span className={`font-bold ${hoveredTrade.riskScore >= 70 ? 'text-red-600' : hoveredTrade.riskScore >= 45 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                      <span className="text-zinc-500 font-medium">Risk</span>
+                      <span className={`font-bold ${hoveredTrade.riskScore >= 70 ? 'text-red-400' : hoveredTrade.riskScore >= 45 ? 'text-amber-400' : 'text-emerald-400'}`}>
                         {hoveredTrade.riskScore}
                       </span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-slate-400 font-medium">Impact</span>
-                      <span className="font-bold text-slate-800">{formatNumber(hoveredTrade.priceImpact, 2)}%</span>
+                      <span className="text-zinc-500 font-medium">Impact</span>
+                      <span className="font-bold text-zinc-200">{formatNumber(hoveredTrade.priceImpact, 2)}%</span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-slate-400 font-medium">Confidence</span>
-                      <span className="font-bold text-slate-800">{formatNumber(hoveredTrade.confidence * 100, 0)}%</span>
+                      <span className="text-zinc-500 font-medium">Confidence</span>
+                      <span className="font-bold text-zinc-200">{formatNumber(hoveredTrade.confidence * 100, 0)}%</span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-slate-400 font-medium">Window</span>
-                      <span className="font-bold text-slate-800">{hoveredTrade.window.tradeCount}</span>
+                      <span className="text-zinc-500 font-medium">Window</span>
+                      <span className="font-bold text-zinc-200">{hoveredTrade.window.tradeCount}</span>
                     </div>
                   </div>
                   {hoveredTrade.isBadTrade && hoveredTrade.badReason && (
-                    <div className="mt-2.5 px-2 py-1.5 rounded-lg bg-red-50 border border-red-200/60">
-                      <p className="text-[10px] font-bold text-red-600 flex items-center gap-1">
+                    <div className="mt-2.5 px-2 py-1.5 rounded-lg bg-red-500/10 border border-red-500/30">
+                      <p className="text-[10px] font-bold text-red-400 flex items-center gap-1">
                         <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" />
                         {hoveredTrade.badReason}
                       </p>
@@ -1607,7 +2277,7 @@ export default function DashboardPage() {
                 </div>
               )}
             </div>
-            <div className="mt-2 flex items-center justify-between text-xs text-slate-400">
+            <div className="mt-2 flex items-center justify-between text-xs text-zinc-600">
               <span suppressHydrationWarning>{new Date(minTime).toLocaleTimeString()}</span>
               <span suppressHydrationWarning>{new Date(maxTime).toLocaleTimeString()}</span>
             </div>
@@ -1618,16 +2288,16 @@ export default function DashboardPage() {
         {/* Agent Performance Table */}
         <div className="relative rounded-2xl overflow-hidden">
           <ShineBorder
-            shineColor={["#f9a8d4", "#fcd34d", "#a5f3fc"]}
+            shineColor={["#10b981", "#3b82f6", "#8b5cf6"]}
             borderWidth={2}
             duration={10}
             className="rounded-2xl"
           />
-          <Card className="border border-white/60 bg-white/50 backdrop-blur-xl rounded-2xl shadow-2xl shadow-slate-300/30">
+          <Card className="border border-zinc-800 bg-zinc-950/90 backdrop-blur-xl rounded-2xl shadow-2xl shadow-black/50">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-sm font-bold tracking-tight text-slate-900">Agent Performance</CardTitle>
-                <span className="px-2 py-0.5 rounded-full bg-slate-100 text-[10px] font-semibold text-slate-500">
+                <CardTitle className="text-sm font-bold tracking-tight text-zinc-100">Agent Performance</CardTitle>
+                <span className="px-2 py-0.5 rounded-full bg-zinc-800 text-[10px] font-semibold text-zinc-400">
                   {trades.length} trades
                 </span>
               </div>
@@ -1636,47 +2306,47 @@ export default function DashboardPage() {
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead>
-                    <tr className="text-left text-slate-500 border-b border-slate-100/80">
-                      <th className="pb-2.5 pr-4 font-bold text-slate-600 tracking-wide uppercase text-[10px]">Agent</th>
-                      <th className="pb-2.5 pr-4 font-bold text-slate-600 tracking-wide uppercase text-[10px]">Strategy</th>
-                      <th className="pb-2.5 pr-4 font-bold text-slate-600 tracking-wide uppercase text-[10px]">Max Position</th>
-                      <th className="pb-2.5 pr-4 font-bold text-slate-600 tracking-wide uppercase text-[10px]">Risk Level</th>
-                      <th className="pb-2.5 pr-4 font-bold text-slate-600 tracking-wide uppercase text-[10px]">Tokens</th>
-                      <th className="pb-2.5 pr-4 font-bold text-slate-600 tracking-wide uppercase text-[10px]">Min Conf.</th>
-                      <th className="pb-2.5 pr-4 font-bold text-slate-600 tracking-wide uppercase text-[10px]">Trades</th>
-                      <th className="pb-2.5 pr-4 font-bold text-slate-600 tracking-wide uppercase text-[10px]">Behavior</th>
-                      <th className="pb-2.5 font-bold text-slate-600 tracking-wide uppercase text-[10px]">Last Seen</th>
+                    <tr className="text-left text-zinc-500 border-b border-zinc-800">
+                      <th className="pb-2.5 pr-4 font-bold text-zinc-500 tracking-wide uppercase text-[10px]">Agent</th>
+                      <th className="pb-2.5 pr-4 font-bold text-zinc-500 tracking-wide uppercase text-[10px]">Strategy</th>
+                      <th className="pb-2.5 pr-4 font-bold text-zinc-500 tracking-wide uppercase text-[10px]">Max Position</th>
+                      <th className="pb-2.5 pr-4 font-bold text-zinc-500 tracking-wide uppercase text-[10px]">Risk Level</th>
+                      <th className="pb-2.5 pr-4 font-bold text-zinc-500 tracking-wide uppercase text-[10px]">Tokens</th>
+                      <th className="pb-2.5 pr-4 font-bold text-zinc-500 tracking-wide uppercase text-[10px]">Min Conf.</th>
+                      <th className="pb-2.5 pr-4 font-bold text-zinc-500 tracking-wide uppercase text-[10px]">Trades</th>
+                      <th className="pb-2.5 pr-4 font-bold text-zinc-500 tracking-wide uppercase text-[10px]">Behavior</th>
+                      <th className="pb-2.5 font-bold text-zinc-500 tracking-wide uppercase text-[10px]">Last Seen</th>
                     </tr>
                   </thead>
-                  <tbody className="text-slate-700">
+                  <tbody className="text-zinc-300">
                     {agentStats.map((stat, idx) => {
                       const agentConfig = dbAgents[stat.id]?.config;
                       const riskLevelDisplay: Record<string, { label: string; color: string }> = {
-                        low: { label: "Low", color: "text-emerald-600 bg-emerald-50 border-emerald-200" },
-                        medium: { label: "Medium", color: "text-amber-600 bg-amber-50 border-amber-200" },
-                        high: { label: "High", color: "text-red-600 bg-red-50 border-red-200" },
+                        low: { label: "Low", color: "text-emerald-400 bg-emerald-500/10 border-emerald-500/30" },
+                        medium: { label: "Medium", color: "text-amber-400 bg-amber-500/10 border-amber-500/30" },
+                        high: { label: "High", color: "text-red-400 bg-red-500/10 border-red-500/30" },
                       };
                       const riskLevel = riskLevelDisplay[agentConfig?.risk_tolerance || "medium"] || riskLevelDisplay.medium;
 
                       return (
                         <tr
                           key={stat.id}
-                          className={`border-b border-slate-50/80 last:border-0 transition-colors hover:bg-slate-50/50 ${idx % 2 === 0 ? 'bg-slate-25/30' : ''}`}
+                          className={`border-b border-zinc-800/50 last:border-0 transition-colors hover:bg-zinc-800/30 ${idx % 2 === 0 ? 'bg-zinc-900/30' : ''}`}
                         >
                           <td className="py-3 pr-4">
                             <div className="flex items-center gap-2">
                               <span className={`h-2.5 w-2.5 rounded-full ${stat.dot} shadow-sm`} />
-                              <span className="font-bold text-slate-900">{stat.name}</span>
-                              <span className="text-[10px] text-slate-400 font-medium">{stat.role}</span>
+                              <span className="font-bold text-zinc-100">{stat.name}</span>
+                              <span className="text-[10px] text-zinc-500 font-medium">{stat.role}</span>
                             </div>
                           </td>
                           <td className="py-3 pr-4">
-                            <span className="px-2 py-0.5 rounded-full bg-slate-100 text-[10px] font-bold text-slate-700 capitalize">
+                            <span className="px-2 py-0.5 rounded-full bg-zinc-800 text-[10px] font-bold text-zinc-300 capitalize">
                               {agentConfig?.strategy || "—"}
                             </span>
                           </td>
                           <td className="py-3 pr-4">
-                            <span className="font-mono font-semibold text-slate-800">
+                            <span className="font-mono font-semibold text-zinc-200">
                               {agentConfig?.max_position_usd ? `$${formatNumber(agentConfig.max_position_usd, 0)}` : "—"}
                             </span>
                           </td>
@@ -1688,42 +2358,42 @@ export default function DashboardPage() {
                           <td className="py-3 pr-4">
                             <div className="flex flex-wrap gap-1 max-w-[120px]">
                               {agentConfig?.preferred_tokens?.slice(0, 3).map((token: string) => (
-                                <span key={token} className="px-1.5 py-0.5 rounded bg-sky-50 border border-sky-200 text-[9px] font-bold text-sky-700">
+                                <span key={token} className="px-1.5 py-0.5 rounded bg-sky-500/10 border border-sky-500/30 text-[9px] font-bold text-sky-400">
                                   {token}
                                 </span>
                               ))}
                               {(agentConfig?.preferred_tokens?.length || 0) > 3 && (
-                                <span className="px-1.5 py-0.5 rounded bg-slate-100 text-[9px] font-medium text-slate-500">
+                                <span className="px-1.5 py-0.5 rounded bg-zinc-800 text-[9px] font-medium text-zinc-500">
                                   +{(agentConfig?.preferred_tokens?.length || 0) - 3}
                                 </span>
                               )}
                               {!agentConfig?.preferred_tokens?.length && (
-                                <span className="text-slate-400">—</span>
+                                <span className="text-zinc-600">—</span>
                               )}
                             </div>
                           </td>
                           <td className="py-3 pr-4">
                             <div className="flex items-center gap-1.5">
-                              <div className="w-10 h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                              <div className="w-10 h-1.5 rounded-full bg-zinc-800 overflow-hidden">
                                 <div
-                                  className="h-full rounded-full bg-gradient-to-r from-violet-400 to-purple-400"
+                                  className="h-full rounded-full bg-gradient-to-r from-violet-500 to-purple-500"
                                   style={{ width: `${agentConfig?.min_confidence || 0}%` }}
                                 />
                               </div>
-                              <span className="font-mono font-semibold text-slate-800">
+                              <span className="font-mono font-semibold text-zinc-200">
                                 {agentConfig?.min_confidence ? `${agentConfig.min_confidence}%` : "—"}
                               </span>
                             </div>
                           </td>
                           <td className="py-3 pr-4">
-                            <span className="font-semibold text-slate-800">{stat.totalTrades}</span>
+                            <span className="font-semibold text-zinc-200">{stat.totalTrades}</span>
                           </td>
                           <td className="py-3 pr-4">
                             <Badge variant="outline" className={`text-[10px] font-bold ${behaviorBadgeClasses[stat.behavior as AgentBehavior]}`}>
                               {behaviorLabels[stat.behavior as AgentBehavior]}
                             </Badge>
                           </td>
-                          <td className="py-3 font-mono text-slate-500" suppressHydrationWarning>
+                          <td className="py-3 font-mono text-zinc-500" suppressHydrationWarning>
                             {stat.lastSeen ? stat.lastSeen.toLocaleTimeString() : "—"}
                           </td>
                         </tr>
