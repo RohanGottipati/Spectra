@@ -97,10 +97,13 @@ spectra/
 
 ## Hackathon
 
-Built for **[Hackathon Name]** - competing for **Best Use of Solana** prize.
+Built for **UOtta Hack 8** - competing for **Best Use of Solana** prize.
 
 ### Team
-- [Add team members]
+- Angus
+- Kabith
+- Rohan
+- David
 
 ---
 
