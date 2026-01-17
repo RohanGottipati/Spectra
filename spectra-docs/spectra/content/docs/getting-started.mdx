@@ -1,0 +1,250 @@
+---
+title: Getting Started
+description: Deploy your AI agent safely with Spectra
+---
+
+import { Card, Cards } from "fumadocs-ui/components/card";
+import { Callout } from "fumadocs-ui/components/callout";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "fumadocs-ui/components/tabs";
+
+# Deploy Your AI Agent with Complete Safety
+
+Spectra provides pre-flight testing and on-chain circuit breakers for AI agents. Deploy with confidence using our sandbox environment and real-time behavior monitoring.
+
+## Key Features
+
+<Cards>
+  <Card
+    title="Pre-Flight Testing"
+    description="Test your AI agent behavior in our secure sandbox environment before deploying to production."
+  />
+  <Card
+    title="Circuit Breaker"
+    description="Automatic on-chain protection that halts your agent if anomalous behavior is detected."
+  />
+  <Card
+    title="Real-Time Monitoring"
+    description="Monitor agent behavior with detailed analytics and instant anomaly alerts."
+  />
+</Cards>
+
+## Quick Start Guide
+
+### Step 1: Install Spectra SDK
+
+Choose your preferred language:
+
+<Tabs defaultValue="python">
+  <TabsList>
+    <TabsTrigger value="python">Python</TabsTrigger>
+    <TabsTrigger value="typescript">TypeScript</TabsTrigger>
+    <TabsTrigger value="javascript">JavaScript</TabsTrigger>
+  </TabsList>
+  <TabsContent value="python">```bash pip install spectra-sdk ```</TabsContent>
+  <TabsContent value="typescript">
+    ```bash npm install @spectra/sdk ```
+  </TabsContent>
+  <TabsContent value="javascript">
+    ```bash npm install @spectra/sdk ```
+  </TabsContent>
+</Tabs>
+
+### Step 2: Configure Your Agent
+
+Set up behavior constraints and safety parameters:
+
+<Tabs defaultValue="python">
+  <TabsList>
+    <TabsTrigger value="python">Python</TabsTrigger>
+    <TabsTrigger value="typescript">TypeScript</TabsTrigger>
+    <TabsTrigger value="javascript">JavaScript</TabsTrigger>
+  </TabsList>
+  <TabsContent value="python">
+```python
+from spectra import Agent, Config
+
+config = Config(
+max_position_size=10000,
+max_daily_loss=5000,
+risk_tolerance='moderate',
+max_frequency_per_min=10,
+allowed_strategies=['momentum', 'arbitrage'],
+)
+
+agent = Agent(
+name='MyTradeBot',
+config=config,
+api_key='your-api-key'
+)
+
+````
+  </TabsContent>
+  <TabsContent value="typescript">
+```typescript
+import { Agent, Config } from '@spectra/sdk';
+
+const config: Config = {
+  maxPositionSize: 10000,
+  maxDailyLoss: 5000,
+  riskTolerance: 'moderate',
+  maxFrequencyPerMin: 10,
+  allowedStrategies: ['momentum', 'arbitrage'],
+};
+
+const agent = new Agent({
+  name: 'MyTradeBot',
+  config,
+  apiKey: process.env.SPECTRA_API_KEY,
+});
+````
+
+  </TabsContent>
+  <TabsContent value="javascript">
+```javascript
+const { Agent } = require('@spectra/sdk');
+
+const config = {
+maxPositionSize: 10000,
+maxDailyLoss: 5000,
+riskTolerance: 'moderate',
+maxFrequencyPerMin: 10,
+allowedStrategies: ['momentum', 'arbitrage'],
+};
+
+const agent = new Agent({
+name: 'MyTradeBot',
+config,
+apiKey: process.env.SPECTRA_API_KEY,
+});
+
+````
+  </TabsContent>
+</Tabs>
+
+### Step 3: Test in Sandbox
+
+Run your agent in our secure testing environment:
+
+```python
+# Sandbox mode - risk-free testing
+agent.deploy(environment='sandbox')
+
+# Run test trades
+results = agent.run_backtest(
+    start_date='2026-01-01',
+    end_date='2026-01-17',
+    initial_capital=100000
+)
+
+print(f"Sharpe Ratio: {results.sharpe_ratio}")
+print(f"Max Drawdown: {results.max_drawdown}")
+print(f"Win Rate: {results.win_rate}")
+````
+
+<Callout type="info">
+  **Tip:** Use the sandbox environment to validate your agent's performance
+  across different market conditions before going live.
+</Callout>
+
+### Step 4: Deploy to Production
+
+Launch with automatic circuit breaker protection:
+
+```python
+# Deploy to production with circuit breaker
+deployment = agent.deploy(
+    environment='production',
+    circuit_breaker=True,
+    alert_email='your-email@example.com'
+)
+
+# Monitor in real-time via dashboard
+print(f"Agent deployed: {deployment.agent_id}")
+print(f"Monitor at: https://spectra.ai/dashboard")
+
+# Set up webhooks for critical events
+agent.on_anomaly_detected(
+    callback=notify_team,
+    alert_level='critical'
+)
+```
+
+## Common Use Cases
+
+### Algorithmic Trading
+
+Deploy trading bots with automatic position size limits, daily loss caps, and strategy diversification controls.
+
+### Autonomous Agents
+
+Run autonomous AI agents with built-in safeguards to prevent unwanted behavior and excessive resource usage.
+
+### DeFi Automation
+
+Automate DeFi operations with risk controls, slippage protection, and real-time anomaly detection.
+
+### Portfolio Rebalancing
+
+Automatically rebalance portfolios with behavior constraints and manual override capabilities.
+
+## Safety & Control Features
+
+Spectra provides comprehensive safety controls:
+
+- **Position Size Limits** - Enforce maximum position sizes to limit exposure per trade
+- **Daily Loss Caps** - Automatic agent halt if daily losses exceed configured threshold
+- **Frequency Controls** - Limit transaction frequency to prevent excessive trading
+- **Strategy Restrictions** - Define allowed trading strategies and prevent unauthorized actions
+- **Real-Time Alerts** - Instant notifications for anomalies and risk events
+- **Circuit Breaker** - On-chain protection that instantly halts agents on critical events
+
+## Configuration Parameters
+
+| Parameter            | Type     | Description                                          |
+| -------------------- | -------- | ---------------------------------------------------- |
+| `maxPositionSize`    | number   | Maximum size for a single position                   |
+| `maxDailyLoss`       | number   | Stop trading if daily loss exceeds this amount       |
+| `riskTolerance`      | string   | Risk level: 'conservative', 'moderate', 'aggressive' |
+| `maxFrequencyPerMin` | number   | Maximum trades allowed per minute                    |
+| `allowedStrategies`  | string[] | List of allowed trading strategies                   |
+| `preferredTokens`    | string[] | Tokens the agent can trade                           |
+
+<Callout type="warn">
+  **Important:** Always start with conservative parameters in the sandbox
+  environment. Gradually increase risk tolerance after validating agent
+  behavior.
+</Callout>
+
+## Monitoring Your Agent
+
+Once deployed, monitor your agent through:
+
+1. **Dashboard** - Real-time visualization of agent activity
+2. **API** - Programmatic access to agent metrics and logs
+3. **Webhooks** - Event-driven notifications for critical actions
+4. **Alerts** - Email and SMS notifications for anomalies
+
+## Next Steps
+
+<Cards>
+  <Card
+    title="View API Documentation"
+    href="/docs/api-reference"
+    description="Explore all available API endpoints"
+  />
+  <Card
+    title="Advanced Configuration"
+    href="/docs/advanced"
+    description="Learn advanced configuration options"
+  />
+  <Card
+    title="Best Practices"
+    href="/docs/best-practices"
+    description="Follow best practices for production deployment"
+  />
+</Cards>
