@@ -37,6 +37,7 @@ export interface CardNavProps {
   buttonText?: string;
   buttonHref?: string;
   hideOnScroll?: boolean;
+  showButton?: boolean;
   actions?: React.ReactNode;
 }
 
@@ -55,6 +56,7 @@ const CardNav: React.FC<CardNavProps> = ({
   buttonText = 'Get Started',
   buttonHref,
   hideOnScroll = false,
+  showButton = true,
   actions
 }) => {
   const { user, signOut } = useAuth();
@@ -257,27 +259,29 @@ const CardNav: React.FC<CardNavProps> = ({
             </div>
           )}
 
-          <div className="card-nav-actions">
-            {actions ? (
-              actions
-            ) : buttonHref ? (
-              <a
-                href={buttonHref}
-                className="card-nav-cta-button"
-                style={{ backgroundColor: buttonBgColor, color: buttonTextColor }}
-              >
-                {buttonText}
-              </a>
-            ) : (
-              <button
-                type="button"
-                className="card-nav-cta-button"
-                style={{ backgroundColor: buttonBgColor, color: buttonTextColor }}
-              >
-                {buttonText}
-              </button>
-            )}
-          </div>
+          {showButton && (
+            <div className="card-nav-actions">
+              {actions ? (
+                actions
+              ) : buttonHref ? (
+                <a
+                  href={buttonHref}
+                  className="card-nav-cta-button"
+                  style={{ backgroundColor: buttonBgColor, color: buttonTextColor }}
+                >
+                  {buttonText}
+                </a>
+              ) : (
+                <button
+                  type="button"
+                  className="card-nav-cta-button"
+                  style={{ backgroundColor: buttonBgColor, color: buttonTextColor }}
+                >
+                  {buttonText}
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="card-nav-content" aria-hidden={!isExpanded}>
