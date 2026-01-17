@@ -121,7 +121,7 @@ const navItems: CardNavItem[] = [
     links: [
       { label: "GitHub", href: "https://github.com", ariaLabel: "View GitHub" },
       { label: "Discord", href: "#discord", ariaLabel: "Join Discord" },
-      { label: "Support", href: "#support", ariaLabel: "Get support" },
+      { label: "Support", href: "/support", ariaLabel: "Get support" },
     ],
   },
 ];
