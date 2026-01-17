@@ -94,9 +94,9 @@ const navItems: CardNavItem[] = [
     bgColor: "#0f172a",
     textColor: "#e2e8f0",
     links: [
-      { label: "Features", href: "/#features", ariaLabel: "View features" },
       { label: "Dashboard", href: "/dashboard", ariaLabel: "View dashboard" },
-      { label: "Demo", href: "/#demo", ariaLabel: "View demo" },
+      { label: "Waitlist", href: "/waitlist", ariaLabel: "Join the waitlist" },
+      { label: "Pricing", href: "/pricing", ariaLabel: "View pricing" },
     ],
   },
   {
@@ -106,7 +106,6 @@ const navItems: CardNavItem[] = [
     links: [
       { label: "SDK", href: "/sdk", ariaLabel: "View SDK" },
       { label: "Docs", href: "/docs", ariaLabel: "View documentation" },
-      { label: "API Reference", href: "/docs/api", ariaLabel: "API reference" },
     ],
   },
   {
@@ -116,7 +115,7 @@ const navItems: CardNavItem[] = [
     links: [
       { label: "GitHub", href: "https://github.com", ariaLabel: "View GitHub" },
       { label: "Discord", href: "#discord", ariaLabel: "Join Discord" },
-      { label: "Support", href: "#support", ariaLabel: "Get support" },
+      { label: "Support", href: "/support", ariaLabel: "Get support" },
     ],
   },
 ];
@@ -184,6 +183,7 @@ export default function SDKPage() {
         buttonTextColor="#0f172a"
         buttonText="Login"
         buttonHref="/login"
+        showButton={false}
       />
 
       {/* Hero + Install wrapper with LightPillar background */}

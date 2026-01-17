@@ -37,6 +37,7 @@ export interface CardNavProps {
   buttonText?: string;
   buttonHref?: string;
   hideOnScroll?: boolean;
+  showButton?: boolean;
 }
 
 const CardNav: React.FC<CardNavProps> = ({
@@ -53,7 +54,8 @@ const CardNav: React.FC<CardNavProps> = ({
   buttonTextColor,
   buttonText = 'Get Started',
   buttonHref,
-  hideOnScroll = false
+  hideOnScroll = false,
+  showButton = true
 }) => {
   const { user, signOut } = useAuth();
   const router = useRouter();
@@ -255,47 +257,49 @@ const CardNav: React.FC<CardNavProps> = ({
             </div>
           )}
 
-          <div className="flex items-center gap-2">
-            {user ? (
-              <>
-                {logoHref === '/' && (
-                  <a
-                    href="/dashboard"
+          {showButton && (
+            <div className="flex items-center gap-2">
+              {user ? (
+                <>
+                  {logoHref === '/' && (
+                    <a
+                      href="/dashboard"
+                      className="card-nav-cta-button"
+                      style={{ backgroundColor: buttonBgColor, color: buttonTextColor }}
+                    >
+                      Dashboard
+                    </a>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleLogout}
                     className="card-nav-cta-button"
                     style={{ backgroundColor: buttonBgColor, color: buttonTextColor }}
                   >
-                    Dashboard
-                  </a>
-                )}
-                <button
-                  type="button"
-                  onClick={handleLogout}
-                  className="card-nav-cta-button"
-                  style={{ backgroundColor: buttonBgColor, color: buttonTextColor }}
-                >
-                  Logout
-                </button>
-              </>
-            ) : (
-              buttonHref ? (
-                <a
-                  href={buttonHref}
-                  className="card-nav-cta-button"
-                  style={{ backgroundColor: buttonBgColor, color: buttonTextColor }}
-                >
-                  {buttonText}
-                </a>
+                    Logout
+                  </button>
+                </>
               ) : (
-                <button
-                  type="button"
-                  className="card-nav-cta-button"
-                  style={{ backgroundColor: buttonBgColor, color: buttonTextColor }}
-                >
-                  {buttonText}
-                </button>
-              )
-            )}
-          </div>
+                buttonHref ? (
+                  <a
+                    href={buttonHref}
+                    className="card-nav-cta-button"
+                    style={{ backgroundColor: buttonBgColor, color: buttonTextColor }}
+                  >
+                    {buttonText}
+                  </a>
+                ) : (
+                  <button
+                    type="button"
+                    className="card-nav-cta-button"
+                    style={{ backgroundColor: buttonBgColor, color: buttonTextColor }}
+                  >
+                    {buttonText}
+                  </button>
+                )
+              )}
+            </div>
+          )}
         </div>
 
         <div className="card-nav-content" aria-hidden={!isExpanded}>
