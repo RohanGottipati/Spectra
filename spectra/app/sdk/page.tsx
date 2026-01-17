@@ -207,11 +207,6 @@ export default function SDKPage() {
         {/* Hero */}
         <section className="relative z-10 pt-36 pb-16 px-8">
           <div className="max-w-4xl mx-auto text-center">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 mb-8">
-              <span className="text-xs text-white/40">v1.0.0</span>
-              <span className="text-xs text-violet-400">Now Available</span>
-            </div>
-
             <div className="flex justify-center mb-6">
               <BlurText
                 text="Spectra SDK"
