@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import Iridescence from "@/components/Iridescence";
 import ColorBends from "@/components/ColorBends";
@@ -243,30 +244,16 @@ export default function Page() {
                 <div className="relative p-[2px] rounded-2xl bg-gradient-to-br from-white/40 via-white/20 to-white/40">
                   {/* Inner glass effect */}
                   <div className="relative w-[480px] aspect-video rounded-xl overflow-hidden bg-slate-900/80 backdrop-blur-sm">
-                    {/* Video placeholder - replace src with actual video/gif */}
                     <video
                       className="w-full h-full object-cover"
                       autoPlay
                       loop
                       muted
                       playsInline
-                      poster=""
                       suppressHydrationWarning
                     >
-                      {/* Add video source here: <source src="/your-video.mp4" type="video/mp4" /> */}
+                      <source src="/1%20Min%20DEMO%20VIDEO.mp4" type="video/mp4" />
                     </video>
-
-                    {/* Placeholder overlay (remove when video is added) */}
-                    <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-slate-800/90 to-slate-900/90">
-                      <div className="text-center">
-                        <div className="w-16 h-16 mx-auto mb-3 rounded-full bg-white/10 flex items-center justify-center">
-                          <svg className="w-8 h-8 text-white/60" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M8 5v14l11-7z"/>
-                          </svg>
-                        </div>
-                        <span className="text-sm text-white/40">Video / GIF</span>
-                      </div>
-                    </div>
 
                     {/* Glass reflection overlay */}
                     <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/5 to-white/10 pointer-events-none"></div>
@@ -371,32 +358,52 @@ export default function Page() {
                 <Card className="flex flex-col p-8 bg-white rounded-2xl shadow-xl border border-slate-100">
                   <span className="text-sm uppercase tracking-widest text-indigo-600 font-semibold mb-3">Monitor</span>
                   <p className="text-slate-600 text-base mb-4">Track every trade, swap, and transaction your bots make on Solana DEXs like Jupiter, Raydium, and Orca.</p>
-                  <div className="rounded-xl overflow-hidden bg-gradient-to-br from-indigo-100 to-blue-50 aspect-video flex items-center justify-center">
-                    <span className="text-sm text-slate-400">Image</span>
+                  <div className="rounded-xl overflow-hidden bg-gradient-to-br from-indigo-100 to-blue-50 aspect-video relative">
+                    <Image
+                      src="/pic1.png"
+                      alt="Dashboard showing trade monitoring with timeline graph and agent performance"
+                      fill
+                      className="object-cover"
+                    />
                   </div>
                 </Card>
 
                 <Card className="flex flex-col p-8 bg-white rounded-2xl shadow-xl border border-slate-100">
                   <span className="text-sm uppercase tracking-widest text-violet-600 font-semibold mb-3">Detect</span>
                   <p className="text-slate-600 text-base mb-4">ML-powered anomaly detection spots unusual PnL, failed trades, and rogue spending patterns instantly.</p>
-                  <div className="rounded-xl overflow-hidden bg-gradient-to-br from-violet-100 to-purple-50 aspect-video flex items-center justify-center">
-                    <span className="text-sm text-slate-400">Image</span>
+                  <div className="rounded-xl overflow-hidden bg-gradient-to-br from-violet-100 to-purple-50 aspect-video relative">
+                    <Image
+                      src="/pic2.png"
+                      alt="Realtime API Trace dashboard showing anomaly detection and trade responses"
+                      fill
+                      className="object-cover"
+                    />
                   </div>
                 </Card>
 
                 <Card className="flex flex-col p-8 bg-white rounded-2xl shadow-xl border border-slate-100">
                   <span className="text-sm uppercase tracking-widest text-cyan-600 font-semibold mb-3">Alert</span>
                   <p className="text-slate-600 text-base mb-4">Get Slack, Discord, or Telegram alerts when bots breach limits or behave unexpectedly.</p>
-                  <div className="rounded-xl overflow-hidden bg-gradient-to-br from-cyan-100 to-sky-50 aspect-video flex items-center justify-center">
-                    <span className="text-sm text-slate-400">Image</span>
+                  <div className="rounded-xl overflow-hidden bg-gradient-to-br from-cyan-100 to-sky-50 aspect-video relative">
+                    <Image
+                      src="/pic3.jpg"
+                      alt="Discord chat interface showing anomaly detection alerts"
+                      fill
+                      className="object-cover"
+                    />
                   </div>
                 </Card>
 
                 <Card className="flex flex-col p-8 bg-white rounded-2xl shadow-xl border border-slate-100">
                   <span className="text-sm uppercase tracking-widest text-emerald-600 font-semibold mb-3">Kill Switch</span>
                   <p className="text-slate-600 text-base mb-4">One-click emergency stop for any bot. Automatically pause agents when anomalies are detected.</p>
-                  <div className="rounded-xl overflow-hidden bg-gradient-to-br from-emerald-100 to-teal-50 aspect-video flex items-center justify-center">
-                    <span className="text-sm text-slate-400">Image</span>
+                  <div className="rounded-xl overflow-hidden bg-gradient-to-br from-emerald-100 to-teal-50 aspect-video relative">
+                    <Image
+                      src="/pic4.jpg"
+                      alt="Kill switch dialog showing automatic shutdown triggered by anomaly detection"
+                      fill
+                      className="object-cover"
+                    />
                   </div>
                 </Card>
               </CardSwap>

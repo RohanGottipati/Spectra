@@ -597,6 +597,13 @@ export default function DashboardPage() {
   const [lastAnomalyTrade, setLastAnomalyTrade] = useState<Trade | null>(null);
   const lastAnomalyTradeIdRef = useRef<string | null>(null);
   const reportedAnomaliesRef = useRef<Set<string>>(new Set());
+  
+  // Solana monitoring state
+  const [solanaMonitoring, setSolanaMonitoring] = useState<Record<AgentId, boolean>>({
+    alpha: false,
+    beta: false,
+    gamma: false,
+  });
 
   const addTrades = useCallback((inputs: TradeInput[]) => {
     setTrades((prev) => {
@@ -720,6 +727,91 @@ export default function DashboardPage() {
       Logout
     </button>
   );
+
+  // Solana monitoring functions
+  const startSolanaMonitoring = async (agentId: AgentId) => {
+    const agent = dbAgents[agentId];
+    if (!agent || !agent.wallet_address) {
+      alert(`Agent ${agentId} does not have a wallet address configured. Please add a wallet address first.`);
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/solana/monitor', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agentId,
+          walletAddress: agent.wallet_address,
+          action: 'start',
+        }),
+      });
+
+      const data = await response.json();
+      if (response.ok) {
+        setSolanaMonitoring(prev => ({ ...prev, [agentId]: true }));
+        console.log(`Started Solana monitoring for ${agentId}:`, data.message);
+      } else {
+        alert(`Error starting monitoring: ${data.error}`);
+      }
+    } catch (error) {
+      console.error('Error starting Solana monitoring:', error);
+      alert('Failed to start Solana monitoring');
+    }
+  };
+
+  const stopSolanaMonitoring = async (agentId: AgentId) => {
+    const agent = dbAgents[agentId];
+    if (!agent || !agent.wallet_address) {
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/solana/monitor', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agentId,
+          walletAddress: agent.wallet_address,
+          action: 'stop',
+        }),
+      });
+
+      const data = await response.json();
+      if (response.ok) {
+        setSolanaMonitoring(prev => ({ ...prev, [agentId]: false }));
+        console.log(`Stopped Solana monitoring for ${agentId}:`, data.message);
+      } else {
+        alert(`Error stopping monitoring: ${data.error}`);
+      }
+    } catch (error) {
+      console.error('Error stopping Solana monitoring:', error);
+      alert('Failed to stop Solana monitoring');
+    }
+  };
+
+  // Check monitoring status on mount
+  useEffect(() => {
+    const checkMonitoringStatus = async () => {
+      try {
+        const response = await fetch('/api/solana/monitor');
+        const data = await response.json();
+        if (data.monitors) {
+          const status: Record<AgentId, boolean> = { alpha: false, beta: false, gamma: false };
+          for (const monitor of data.monitors) {
+            if (monitor.agentId === 'alpha' || monitor.agentId === 'beta' || monitor.agentId === 'gamma') {
+              status[monitor.agentId] = true;
+            }
+          }
+          setSolanaMonitoring(status);
+        }
+      } catch (error) {
+        console.error('Error checking monitoring status:', error);
+      }
+    };
+
+    checkMonitoringStatus();
+  }, []);
 
   const handleRestartAgents = useCallback(() => {
     setAgentsDisabled(false);
@@ -1902,33 +1994,92 @@ export default function DashboardPage() {
               </DialogTrigger>
               <DialogContent className="max-w-md bg-zinc-950 backdrop-blur-xl border-zinc-800">
                 <DialogHeader>
-                  <DialogTitle className="text-zinc-100">Agent Configuration</DialogTitle>
-                  <DialogDescription className="text-zinc-500">
+                  <DialogTitle className="text-xl font-bold text-zinc-100">Agent Configuration</DialogTitle>
+                  <DialogDescription className="text-sm text-zinc-400">
                     Set behavior parameters for agents.
                   </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4 pt-2">
                   <div>
-                    <Label className="text-sm mb-1.5 block text-zinc-400">Agent</Label>
+                    <Label className="text-sm font-semibold mb-1.5 block text-zinc-200">Agent</Label>
                     <Select
                       value={selectedAgentForConfig}
                       onValueChange={(value) => setSelectedAgentForConfig(value as AgentId)}
                     >
-                      <SelectTrigger>
-                        <SelectValue />
+                      <SelectTrigger className="bg-zinc-900 border-zinc-700 text-zinc-100">
+                        <SelectValue className="text-zinc-100" />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="bg-zinc-900 border-zinc-700">
                         {AGENTS.map((agentMeta) => (
-                          <SelectItem key={agentMeta.id} value={agentMeta.id}>
+                          <SelectItem key={agentMeta.id} value={agentMeta.id} className="text-zinc-100 focus:bg-zinc-800">
                             {agentMeta.name}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
+                  <div>
+                    <Label className="text-sm font-semibold mb-1.5 block text-zinc-200">Solana Wallet Address</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        type="text"
+                        placeholder="Enter Solana wallet address..."
+                        value={dbAgents[selectedAgentForConfig]?.wallet_address || ""}
+                        onChange={async (e) => {
+                          const walletAddress = e.target.value;
+                          const supabase = supabaseRef.current;
+                          if (!supabase) return;
+                          
+                          const { error } = await supabase
+                            .from("agents")
+                            .upsert({
+                              id: selectedAgentForConfig,
+                              wallet_address: walletAddress,
+                              updated_at: new Date().toISOString(),
+                            });
+                          
+                          if (!error) {
+                            setDbAgents(prev => ({
+                              ...prev,
+                              [selectedAgentForConfig]: {
+                                ...prev[selectedAgentForConfig],
+                                id: selectedAgentForConfig,
+                                wallet_address: walletAddress,
+                              } as DbAgent,
+                            }));
+                          }
+                        }}
+                        className="font-mono text-sm bg-zinc-900 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 focus:border-zinc-600"
+                      />
+                      {dbAgents[selectedAgentForConfig]?.wallet_address && (
+                        <Button
+                          onClick={() => {
+                            const isMonitoring = solanaMonitoring[selectedAgentForConfig];
+                            if (isMonitoring) {
+                              stopSolanaMonitoring(selectedAgentForConfig);
+                            } else {
+                              startSolanaMonitoring(selectedAgentForConfig);
+                            }
+                          }}
+                          variant={solanaMonitoring[selectedAgentForConfig] ? "destructive" : "default"}
+                          size="sm"
+                          className="whitespace-nowrap"
+                        >
+                          {solanaMonitoring[selectedAgentForConfig] ? "Stop Monitor" : "Start Monitor"}
+                        </Button>
+                      )}
+                    </div>
+                    {dbAgents[selectedAgentForConfig]?.wallet_address && (
+                      <p className="mt-1 text-xs font-medium text-zinc-300">
+                        {solanaMonitoring[selectedAgentForConfig] 
+                          ? "🟢 Monitoring Solana transactions in real-time" 
+                          : "⚪ Monitoring stopped"}
+                      </p>
+                    )}
+                  </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <Label className="text-sm mb-1.5 block text-zinc-400">Max Position</Label>
+                      <Label className="text-sm font-semibold mb-1.5 block text-zinc-200">Max Position</Label>
                       <Input
                         type="number"
                         placeholder="10000"
@@ -1939,10 +2090,11 @@ export default function DashboardPage() {
                             maxPositionSize: e.target.value ? parseFloat(e.target.value) : undefined,
                           }))
                         }
+                        className="bg-zinc-900 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 focus:border-zinc-600"
                       />
                     </div>
                     <div>
-                      <Label className="text-sm mb-1.5 block text-zinc-400">Max Daily Loss</Label>
+                      <Label className="text-sm font-semibold mb-1.5 block text-zinc-200">Max Daily Loss</Label>
                       <Input
                         type="number"
                         placeholder="5000"
@@ -1953,12 +2105,13 @@ export default function DashboardPage() {
                             maxDailyLoss: e.target.value ? parseFloat(e.target.value) : undefined,
                           }))
                         }
+                        className="bg-zinc-900 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 focus:border-zinc-600"
                       />
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <Label className="text-sm mb-1.5 block text-zinc-400">Risk Tolerance</Label>
+                      <Label className="text-sm font-semibold mb-1.5 block text-zinc-200">Risk Tolerance</Label>
                       <Select
                         value={formConfig.riskTolerance || ""}
                         onValueChange={(value) =>
@@ -1968,18 +2121,18 @@ export default function DashboardPage() {
                           }))
                         }
                       >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select" />
+                        <SelectTrigger className="bg-zinc-900 border-zinc-700 text-zinc-100">
+                          <SelectValue placeholder="Select" className="text-zinc-100" />
                         </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="conservative">Conservative</SelectItem>
-                          <SelectItem value="moderate">Moderate</SelectItem>
-                          <SelectItem value="aggressive">Aggressive</SelectItem>
+                        <SelectContent className="bg-zinc-900 border-zinc-700">
+                          <SelectItem value="conservative" className="text-zinc-100 focus:bg-zinc-800">Conservative</SelectItem>
+                          <SelectItem value="moderate" className="text-zinc-100 focus:bg-zinc-800">Moderate</SelectItem>
+                          <SelectItem value="aggressive" className="text-zinc-100 focus:bg-zinc-800">Aggressive</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
                     <div>
-                      <Label className="text-sm mb-1.5 block text-zinc-400">Max Freq/Min</Label>
+                      <Label className="text-sm font-semibold mb-1.5 block text-zinc-200">Max Freq/Min</Label>
                       <Input
                         type="number"
                         placeholder="5"
@@ -1990,11 +2143,12 @@ export default function DashboardPage() {
                             maxFrequencyPerMin: e.target.value ? parseFloat(e.target.value) : undefined,
                           }))
                         }
+                        className="bg-zinc-900 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 focus:border-zinc-600"
                       />
                     </div>
                   </div>
                   <div>
-                    <Label className="text-sm mb-1.5 block text-zinc-400">Preferred Tokens</Label>
+                    <Label className="text-sm font-semibold mb-1.5 block text-zinc-200">Preferred Tokens</Label>
                     <Input
                       placeholder="SOL, USDC, JUP"
                       value={formConfig.preferredTokens ? formConfig.preferredTokens.join(", ") : ""}
@@ -2004,6 +2158,7 @@ export default function DashboardPage() {
                           preferredTokens: e.target.value ? e.target.value.split(",").map((t) => t.trim()) : undefined,
                         }))
                       }
+                      className="bg-zinc-900 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 focus:border-zinc-600"
                     />
                   </div>
                   <div className="flex gap-2 pt-2">
@@ -2017,7 +2172,7 @@ export default function DashboardPage() {
                     >
                       {isSavingConfig ? "Saving..." : "Apply"}
                     </Button>
-                    <Button onClick={downloadConfigTemplate} variant="outline" className="flex-1">
+                    <Button onClick={downloadConfigTemplate} variant="outline" className="flex-1 bg-zinc-900 border-zinc-700 text-zinc-200 hover:bg-zinc-800 hover:text-zinc-100 font-semibold">
                       Template
                     </Button>
                   </div>
