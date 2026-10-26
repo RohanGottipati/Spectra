@@ -7,10 +7,6 @@ const SOLANA_RPC_URL = process.env.NEXT_PUBLIC_SOLANA_RPC_URL ||
 
 export const connection = new Connection(SOLANA_RPC_URL, 'confirmed');
 
-export function createConnection(rpcUrl?: string): Connection {
-  return new Connection(rpcUrl || SOLANA_RPC_URL, 'confirmed');
-}
-
 export function isValidPublicKey(address: string): boolean {
   try {
     new PublicKey(address);

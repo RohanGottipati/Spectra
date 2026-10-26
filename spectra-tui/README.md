@@ -4,7 +4,7 @@ Terminal User Interface for Spectra AI Trading Agents. A full-featured TUI built
 
 ## Features
 
-- Animated loading screen with spinning "SPECTRA" ASCII art
+- Animated loading screen with "SPECTRA" ASCII art and a progress bar (press any key to skip)
 - Real-time dashboard with agent statistics
 - Live trades table with color-coded risk levels
 - API activity log showing recent requests
@@ -33,7 +33,6 @@ The TUI requires these Python packages (automatically installed):
 - `textual>=0.47.0` - TUI framework
 - `httpx>=0.27.0` - HTTP client for API calls
 - `rich>=13.7.0` - Rich text rendering
-- `pyfiglet>=1.0.2` - ASCII art generation
 
 ## Usage
 
@@ -56,7 +55,7 @@ Configure the TUI with these environment variables:
 | `SPECTRA_API_URL` | `http://localhost:3000` | Base URL for the Spectra API |
 | `SPECTRA_REFRESH_INTERVAL` | `5` | Data refresh interval in seconds |
 | `SPECTRA_MAX_TRADES` | `20` | Maximum trades to display in table |
-| `SPECTRA_LOADING_DELAY` | `3.0` | Loading screen duration in seconds |
+| `SPECTRA_LOADING_DELAY` | `5.0` | Loading screen duration in seconds |
 
 Example:
 ```bash
@@ -67,10 +66,10 @@ SPECTRA_API_URL=http://localhost:3000 SPECTRA_REFRESH_INTERVAL=3 spectra
 
 | Key | Action |
 |-----|--------|
+| any key | Skip the loading screen |
 | `r` | Manually refresh data |
-| `d` | Toggle dark/light mode |
+| `c` | Clear the API logs |
 | `q` | Quit the application |
-| `ESC` | Go back to previous screen |
 
 ## API Endpoint
 
@@ -102,7 +101,7 @@ Returns:
 1. Start the Next.js web application:
    ```bash
    cd spectra
-   pnpm dev
+   npm run dev
    ```
 
 2. In a new terminal, run the TUI:
@@ -120,9 +119,6 @@ The TUI includes:
 ## Development
 
 ```bash
-# Install dev dependencies
-pip install -e ".[dev]"
-
-# Run with auto-reload
+# Run with the Textual devtools (requires `pip install textual-dev`)
 textual run --dev spectra_tui.main:SpectraApp
 ```

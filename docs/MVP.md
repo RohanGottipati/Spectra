@@ -1,5 +1,7 @@
 # MVP Scope for Hackathon
 
+> **Note:** This is a hackathon planning document. It describes the intended design; the implemented stack and features are documented in the [root README](../README.md).
+
 ## Goal
 
 Build a **working demo** that shows:
