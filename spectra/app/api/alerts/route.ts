@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
 
-const FALLBACK_WEBHOOK_URL =
-  "https://discord.com/api/webhooks/1462213404168028161/Xo01sYUoyZThgxwf3HKS60lx-75lQBI-oREAbdsg6o1RXT4Yr6_6YpIoKtPGEpV7cE3m";
-
 export async function POST(request: Request) {
   try {
-    const webhookUrl = process.env.DISCORD_WEBHOOK_URL || FALLBACK_WEBHOOK_URL;
+    const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
+    if (!webhookUrl) {
+      return NextResponse.json(
+        { error: "DISCORD_WEBHOOK_URL is not configured" },
+        { status: 500 }
+      );
+    }
     const payload = await request.json();
     const body =
       payload && (payload.content || payload.embeds)

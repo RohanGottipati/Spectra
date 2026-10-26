@@ -112,7 +112,9 @@ Put web app variables in `spectra/.env.local` (all `.env*` files are gitignored)
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes | Supabase anon/public key |
 | `NEXT_PUBLIC_SOLANA_RPC_URL` | No | Solana RPC endpoint (falls back to `SOLANA_RPC_URL`, then `https://api.devnet.solana.com`) |
 | `SOLANA_RPC_URL` | No | Server-side fallback for the Solana RPC endpoint |
-| `DISCORD_WEBHOOK_URL` | No | Discord webhook that `/api/alerts` posts to |
+| `DISCORD_WEBHOOK_URL` | For alerts | Discord webhook that `/api/alerts` posts to (the route returns 500 if unset) |
+
+For the Supabase MCP server used by editor tooling, copy `.mcp.example.json` to `.mcp.json` (gitignored) and set `SUPABASE_ACCESS_TOKEN` in your environment.
 
 TUI variables (`SPECTRA_API_URL`, `SPECTRA_REFRESH_INTERVAL`, `SPECTRA_MAX_TRADES`, `SPECTRA_LOADING_DELAY`) are documented in [`spectra-tui/README.md`](spectra-tui/README.md).
 
