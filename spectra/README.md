@@ -1,36 +1,26 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Spectra web app
 
-## Getting Started
+Next.js 16 app for Spectra: the landing/marketing pages, the live agent dashboard, the API routes and the Fumadocs documentation site. See the [root README](../README.md) for an overview, environment variables and the full route list.
 
-First, run the development server:
+## Getting started
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install      # runs `fumadocs-mdx` on postinstall
+npm run dev      # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Create `.env.local` with at least `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` first. Pages create Supabase clients while prerendering, so `next build` also needs them.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Layout
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- `app/`: routes (`/`, `/dashboard`, `/login`, `/signup`, `/pricing`, `/sdk`, `/api`, `/waitlist`, `/support`, `/docs`), API routes under `app/api/`, Supabase auth callbacks under `app/auth/`
+- `components/`: visual components, `ui/` primitives and `docs/` MDX components
+- `content/docs/`: MDX pages for `/docs`
+- `lib/`: Supabase clients (`supabase/`), auth hook (`auth.ts`), Solana integration (`solana/`), Fumadocs source (`source.ts`)
 
-## Learn More
+## Scripts
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `npm run dev`: dev server
+- `npm run build`: production build
+- `npm run start`: serve the build
+- `npm run lint`: ESLint

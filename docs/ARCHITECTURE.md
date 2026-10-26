@@ -1,5 +1,7 @@
 # Technical Architecture
 
+> **Note:** This is a hackathon planning document. It describes the intended design; the implemented stack and features are documented in the [root README](../README.md).
+
 ## System Overview
 
 ```
