@@ -798,7 +798,7 @@ export default function DashboardPage() {
         const data = await response.json();
         if (data.monitors) {
           const status: Record<AgentId, boolean> = { alpha: false, beta: false, gamma: false };
-          for (const monitor of data.monitors) {
+          for (const monitor of data.monitors as Array<{ agentId?: string }>) {
             if (monitor.agentId === 'alpha' || monitor.agentId === 'beta' || monitor.agentId === 'gamma') {
               status[monitor.agentId] = true;
             }
@@ -1070,7 +1070,7 @@ export default function DashboardPage() {
       return next;
     });
 
-    const timeoutId = window.setTimeout(() => {
+    const timeoutId = setTimeout(() => {
       setNewApiEventIds((prev) => {
         const next = new Set(prev);
         newIds.forEach((id) => next.delete(id));

@@ -45,7 +45,7 @@ export async function parseTransaction(
   for (const ix of instructions) {
     const parsedIx = parseInstruction(ix);
     if (parsedIx) {
-      parsed.type = parsedIx.type;
+      parsed.type = parsedIx.type ?? parsed.type;
       parsed.amount = parsedIx.amount || parsed.amount;
       parsed.token = parsedIx.token || parsed.token;
       parsed.from = parsedIx.from || parsed.from;
